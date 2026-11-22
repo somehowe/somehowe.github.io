@@ -28,10 +28,13 @@
         <img src="/assets/galaxy/scene-landscape.webp" alt="" decoding="async">
       </picture>
       <canvas id="space-stage" aria-hidden="true"></canvas>
-      <button id="orb-target" type="button" hidden aria-label="Break the glass orb"><span>Break the orb</span></button>
+      <button id="orb-target" type="button" hidden aria-label="Break the glass orb">
+        <span class="touch-hint" aria-hidden="true">Tap the glass</span>
+        <span class="key-hint" aria-hidden="true">Break the glass</span>
+      </button>
     </div>
+    <p id="instructions" hidden>Move across the sky to trace stars. Drag or use the arrow keys to orbit. Press Home to reset the view.</p>
     <footer id="scene-tools" hidden>
-      <p id="instructions">Drag to trace constellations<span class="sr-only">. Drag the sky or use the arrow keys to orbit. Press Home to reset the view.</span></p>
       <div class="playback">
         <button id="reform" type="button" hidden>Re-form orb</button>
         <button id="motion" type="button" aria-label="Pause animation" title="Pause animation"><i aria-hidden="true"></i></button>
