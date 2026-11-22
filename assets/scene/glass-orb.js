@@ -49,23 +49,45 @@ export const orbFragmentShader = `
     vec3 reflected = reflect(vec3(0., 0., -1.), front);
     vec3 reflection = skyAt(lensCenter + screenAxis * (2.6 * reflected.xy + vec2(.13, .26)));
     float fresnel = .04 + .96 * pow(1. - front.z, 5.);
-    vec3 surface = mix(transmission * vec3(.95, .988, 1.), reflection, fresnel);
-    // A soft, directional reflection gives the curved surface a readable silhouette.
-    vec3 key = normalize(vec3(-.63 + .12 * parallax.x, .74 + .08 * parallax.y, .08));
+    // A cool body and a dark return just inside the rim give the glass thickness.
+    vec3 body = transmission * mix(vec3(.65, .83, .94), vec3(.96, 1., 1.), front.z);
+    vec3 surface = mix(body, reflection, fresnel);
+    float shoulder = exp(-pow((radius - .889) / .050, 2.));
+    surface *= 1. - .50 * shoulder;
+    vec2 limb = xy / max(radius, .001);
+    float crown = max(dot(limb, normalize(vec2(-.57, .82))), 0.);
+    float foot = max(dot(limb, normalize(vec2(.62, -.78))), 0.);
+    float thickness = smoothstep(.40, .99, radius);
+    vec3 sheen = vec3(.09, .25, .39) * thickness * (.25 + .53 * crown + .34 * foot);
+
+    // An extended light source sweeps across the dome. Projecting it into the
+    // reflection direction makes its long and short edges curve around the glass.
+    vec3 key = normalize(vec3(-.59 + .12 * parallax.x, .76 + .08 * parallax.y, -.22));
     vec3 tangent = normalize(cross(key, vec3(0., 0., 1.)));
     vec3 bitangent = cross(key, tangent);
-    vec2 delta = vec2(dot(reflected, tangent), dot(reflected, bitangent));
-    float upper = max(dot(reflected, key), 0.);
-    float soft = exp(-dot(delta * vec2(2.6, 7.), delta * vec2(2.6, 7.)));
-    float glint = exp(-dot(delta * vec2(3.8, 22.), delta * vec2(3.8, 22.)));
-    vec2 limb = xy / max(radius, .001);
-    float rimLight = .09 + .74 * pow(max(dot(limb, normalize(vec2(-.64, .77))), 0.), 3.)
-                         + .40 * pow(max(dot(limb, normalize(vec2(.78, -.63))), 0.), 7.);
-    float lip = exp(-pow((1. - min(radius, 1.)) / max(aa * 1.3, .010), 2.));
-    float inner = exp(-pow((radius - .956) / .018, 2.));
-    vec3 sheen = vec3(.70, .83, .94) * (soft * .19 + glint * .70) * upper
-               + vec3(.70, .86, .96) * rimLight * (.92 * lip + .17 * inner + .30 * fresnel);
-    vec3 color = surface + (1. - surface) * sheen;
+    vec2 uv = vec2(dot(reflected, tangent), dot(reflected, bitangent));
+    float facing = smoothstep(.32, .77, dot(reflected, key));
+    float longAxis = uv.x / .81;
+    float shortAxis = (uv.y - .070 * longAxis * longAxis) / .135;
+    float footprint = pow(abs(longAxis), 4.) + pow(abs(shortAxis), 2.);
+    float broad = exp(-.58 * footprint);
+    float core = (1. - smoothstep(.48, 1.04, footprint))
+                 * (.36 + .64 * exp(-1.85 * pow(longAxis + .12, 2.)));
+    float spill = exp(-pow(uv.x / .90, 2.) - pow((uv.y + .035) / .42, 2.));
+    sheen += facing * (vec3(.12, .29, .45) * spill + vec3(.32, .46, .57) * broad
+                       + vec3(.70, .72, .74) * core);
+
+    // The exit surface returns a tighter arc on the opposite limb. Its width
+    // and intensity vary around the perimeter, leaving a dark edge between glints.
+    float outer = exp(-pow((1. - min(radius, 1.)) / max(.018, aa * 1.55), 2.));
+    float returnRadius = .931 + .025 * limb.x;
+    float returnBand = exp(-pow((radius - returnRadius) / .033, 2.));
+    float returnCore = exp(-pow((radius - returnRadius) / max(.012, aa * 1.10), 2.));
+    float edgeLight = .14 + .92 * pow(crown, 2.5) + .64 * pow(foot, 3.);
+    sheen += vec3(.63, .84, .98) * edgeLight * outer
+           + vec3(.22, .50, .70) * (.13 + .71 * pow(foot, 2.2) + .23 * crown) * returnBand
+           + vec3(.65, .84, .93) * .59 * pow(foot, 7.) * returnCore;
+    vec3 color = surface + (1. - surface) * min(sheen, vec3(.99));
     // While the photograph decodes, let the photographic CSS sky show through.
     float opacity = mix(clamp(max(sheen.r, max(sheen.g, sheen.b)), .006, 1.), 1., skyReady);
     if (skyReady < .5) color = sheen / opacity;

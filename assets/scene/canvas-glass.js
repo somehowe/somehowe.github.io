@@ -34,8 +34,25 @@ export function createCanvasGlass(doc, requestFrame) {
     const result = surfaceContext.createImageData(size, size);
     const pixels = result.data;
     const clamp = value => Math.max(0, Math.min(1, value));
-    const tint = [186, 218, 238];
-    const transmission = [0.94, 0.99, 1];
+    const smooth = (a, b, value) => {
+      const t = clamp((value - a) / (b - a));
+      return t * t * (3 - 2 * t);
+    };
+    const gaussian = value => Math.exp(-value * value);
+    const normalize = (x, y, z) => {
+      const length = Math.hypot(x, y, z);
+      return [x / length, y / length, z / length];
+    };
+    const [kx, ky, kz] = normalize(-0.59, 0.76, -0.22);
+    const [tx, ty] = normalize(ky, -kx, 0);
+    const bx = -kz * ty, by = kz * tx, bz = kx * ty - ky * tx;
+    // RGB coefficients match glass-orb.js, in linear screen intensities.
+    const absorption = [0.65, 0.83, 0.94], clear = [0.96, 1, 1];
+    const bodySheen = [0.09, 0.25, 0.39], spillSheen = [0.12, 0.29, 0.45];
+    const stripSheen = [0.32, 0.46, 0.57], coreSheen = [0.70, 0.72, 0.74];
+    const edgeSheen = [0.63, 0.84, 0.98], bandSheen = [0.22, 0.50, 0.70];
+    const causticSheen = [0.65, 0.84, 0.93];
+    const aa = 2 / size;
     const sourceCenter = (sampleSize - 1) / 2;
 
     for (let row = 0; row < size; row++) {
@@ -56,26 +73,42 @@ export function createCanvasGlass(doc, requestFrame) {
         const near = 4 * sampleSize;
         const fractionX = srcX - x0, fractionY = srcY - y0;
         const fresnel = 0.04 + 0.96 * (1 - z) ** 5;
-        const directional = clamp(0.48 - 0.30 * x - 0.29 * y);
-        const rim = fresnel * (0.18 + 0.55 * directional);
         const reflectX = Math.round(sourceCenter * (1 + x * z * 1.7));
         const reflectY = Math.round(sourceCenter * (1 + y * z * 1.7));
         const reflected = 4 * (reflectY * sampleSize + reflectX);
-        const lightX = x + 0.43, lightY = y + 0.74;
-        const along = (lightX * 0.85 - lightY * 0.52) / 0.18;
-        const across = (lightX * 0.52 + lightY * 0.85 + 0.035 * along * along) / 0.033;
-        const glint = 0.86 * Math.exp(-along * along - across * across);
-        const arc = Math.exp(-(((radial - 0.956) / 0.014) ** 2)
-          - ((x - 0.42) / 0.50) ** 2 - ((y - 0.82) / 0.25) ** 2);
+
+        // Project the oblong source onto the reflected ray, just as on WebGL.
+        const rx = 2 * z * x, ry = -2 * z * y, rz = 2 * z * z - 1;
+        const u = rx * tx + ry * ty, v = rx * bx + ry * by + rz * bz;
+        const facing = smooth(0.32, 0.77, rx * kx + ry * ky + rz * kz);
+        const along = u / 0.81, across = (v - 0.070 * along * along) / 0.135;
+        const footprint = along ** 4 + across * across;
+        const strip = facing * Math.exp(-0.58 * footprint);
+        const core = facing * (1 - smooth(0.48, 1.04, footprint))
+          * (0.36 + 0.64 * Math.exp(-1.85 * (along + 0.12) ** 2));
+        const spill = facing * gaussian(u / 0.90) * gaussian((v + 0.035) / 0.42);
+        const lx = x / Math.max(radial, 0.001), ly = -y / Math.max(radial, 0.001);
+        const crown = Math.max(0, -0.571 * lx + 0.821 * ly);
+        const foot = Math.max(0, 0.622 * lx - 0.783 * ly);
+        const volume = smooth(0.40, 0.99, radial) * (0.25 + 0.53 * crown + 0.34 * foot);
+        const shade = 1 - 0.50 * gaussian((radial - 0.889) / 0.05);
+        const edge = gaussian((1 - radial) / Math.max(0.018, aa * 1.55))
+          * (0.14 + 0.92 * crown ** 2.5 + 0.64 * foot ** 3);
+        const bandOffset = radial - (0.931 + 0.025 * lx);
+        const band = gaussian(bandOffset / 0.033) * (0.13 + 0.71 * foot ** 2.2 + 0.23 * crown);
+        const caustic = gaussian(bandOffset / Math.max(0.012, aa * 1.10)) * 0.59 * foot ** 7;
         const index = 4 * (row * size + col);
         for (let channel = 0; channel < 3; channel++) {
           const p = base + channel;
           const upper = sky[p] + fractionX * (sky[p + 4] - sky[p]);
           const lower = sky[p + near] + fractionX * (sky[p + near + 4] - sky[p + near]);
-          const through = (upper + fractionY * (lower - upper)) * transmission[channel];
-          const mixed = through + (sky[reflected + channel] - through) * fresnel;
-          const edge = mixed + (tint[channel] - mixed) * (rim + 0.21 * arc);
-          pixels[index + channel] = edge + (249 - edge) * glint;
+          const through = (upper + fractionY * (lower - upper))
+            * (absorption[channel] + (clear[channel] - absorption[channel]) * z);
+          const body = (through + (sky[reflected + channel] - through) * fresnel) * shade;
+          const sheen = bodySheen[channel] * volume + spillSheen[channel] * spill
+            + stripSheen[channel] * strip + coreSheen[channel] * core + edgeSheen[channel] * edge
+            + bandSheen[channel] * band + causticSheen[channel] * caustic;
+          pixels[index + channel] = body + (255 - body) * Math.min(0.99, sheen);
         }
         pixels[index + 3] = 255 * clamp((1 - radial) * size * 0.5 + 0.5);
       }
