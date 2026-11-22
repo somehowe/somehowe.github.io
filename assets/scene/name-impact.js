@@ -123,14 +123,14 @@ export function createNameImpact(heading) {
       return;
     }
     const impactX = impactClientX + world.scrollX;
-    const travel = Math.min(19, size * .15);
+    const travel = Math.min(34, size * .30);
     for (const letter of letters) {
       const dx = (letter.x - impactX) / size;
       const time = Math.max(0, ageSeconds - Math.min(.095, .042 * Math.abs(dx)));
       const strength = Math.exp(-.65 * dx * dx);
-      const wave = Math.sin(17 * time) * Math.exp(-5.9 * time);
+      const wave = Math.sin(16 * time) * Math.exp(-5.0 * time);
       const y = travel * strength * wave;
-      const x = y * .34 * Math.tanh(dx * 1.5);
+      const x = y * .46 * Math.tanh(dx * 1.7);
       letter.element.style.transform = 'translate(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px)';
     }
     if (!active) {

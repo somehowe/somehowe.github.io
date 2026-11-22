@@ -68,8 +68,8 @@ export function createOrbDrop(nameImpact) {
     const age = state.breakAge;
     const lift = ease((age - .085) / (settleTime - .085));
     // For the first beat the glass follows the yielding letters, then its fragments lift off.
-    const compression = Math.min(17, radius * .22) * Math.sin(17 * age)
-      * Math.exp(-7.5 * age) * (1 - ease(age / .25));
+    const compression = Math.min(31, radius * .46) * Math.sin(16 * age)
+      * Math.exp(-5 * age) * (1 - ease((age - .09) / .16));
     const center = contact + compression + (restY - contact) * lift;
     state.introOrbY = center;
     state.introFragmentY = center;
