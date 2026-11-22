@@ -12,7 +12,7 @@ export const orbVertexShader = `
 
 export const orbFragmentShader = `
   uniform vec2 viewport, lensCenter, skySize, frameOrigin, frameExtent, parallax;
-  uniform float orbRadius, shellOpacity, dpr, skyReady, orbIntent;
+  uniform float orbRadius, shellOpacity, dpr, skyReady, orbIntent, glintHead;
   uniform sampler2D galaxyMap, starLayer;
   varying vec2 disk;
 
@@ -114,14 +114,26 @@ export const orbFragmentShader = `
     if (skyReady < .5) color = sheen / opacity;
     if (xy.x > .43 && xy.x < .67 && xy.y > .49 && xy.y < .91) {
       // Light catches one lip. Its shadow remains visible over bright stars.
-      float halfWidth = clamp(orbRadius * .0035, .39, .68) / orbRadius;
-      float taper = smoothstep(.521, .57, xy.y) * (1. - smoothstep(.57,.632,xy.x));
-      float stroke = halfWidth * mix(.38, 1., taper);
+      float halfWidth = clamp(orbRadius * .0052, .58, .86) / orbRadius;
+      float taper = smoothstep(.518, .564, xy.y) * (1. - smoothstep(.576,.638,xy.x));
+      float stroke = halfWidth * mix(.43, 1., taper);
       float dark = 1. - smoothstep(stroke * .5, stroke + aa, crackDistance(xy));
       vec2 relief = vec2(-.72,.26) * halfWidth * 1.9;
-      float lip = 1. - smoothstep(stroke * .28, stroke * .80 + aa, crackDistance(xy - relief));
-      color *= 1. - (.55 + .14 * orbIntent) * taper * dark;
-      color = mix(color, vec3(.76, .88, .94), (.55 + .28 * orbIntent) * taper * lip);
+      float edgeDistance = crackDistance(xy - relief);
+      float lip = 1. - smoothstep(stroke * .35, stroke * .88 + aa, edgeDistance);
+      color *= 1. - (.67 + .10 * orbIntent) * taper * dark;
+      color = mix(color, vec3(.82, .91, .96), (.67 + .20 * orbIntent) * taper * lip);
+      if (glintHead > 0.) {
+        // Project onto the direction of travel so the glint also follows the fork.
+        float along = (.872 - xy.y + .60 * max(0., xy.x - .49)) / .353;
+        float offset = along - mix(-.24, 1.27, glintHead);
+        float falloff = offset / (offset < 0. ? .20 : .095);
+        float streak = exp(-falloff * falloff);
+        float nearEdge = exp(-pow(edgeDistance / (stroke * 2.15 + aa), 2.));
+        float glow = exp(-pow(edgeDistance / (stroke * 4.5 + aa), 2.));
+        float light = streak * taper;
+        color += (1. - color) * light * (.33 * glow * vec3(.52, .78, 1.) + .90 * nearEdge);
+      }
     }
     gl_FragColor = vec4(color, opacity * coverage * shellOpacity);
   }
@@ -133,6 +145,7 @@ export function createGlassOrb(THREE, sceneUniforms, requestRedraw) {
     viewport, lensCenter, orbRadius, dpr, parallax,
     shellOpacity: { value: 1 },
     orbIntent: { value: 0 },
+    glintHead: { value: 0 },
     skyReady: { value: 0 },
     skySize: { value: new THREE.Vector2(1, 1) },
     galaxyMap: { value: null },
@@ -192,6 +205,7 @@ export function createGlassOrb(THREE, sceneUniforms, requestRedraw) {
 
   function update(state) {
     uniforms.orbIntent.value = state.orbIntent || 0;
+    uniforms.glintHead.value = Math.max(0, state.crackGlint || 0);
     const age = Number.isFinite(state.breakAge) ? state.breakAge : 0;
     uniforms.shellOpacity.value = 1 - THREE.MathUtils.smoothstep(age, .045, .29);
     mesh.visible = uniforms.shellOpacity.value > 0;

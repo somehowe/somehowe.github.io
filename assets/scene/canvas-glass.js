@@ -121,25 +121,38 @@ export function createCanvasGlass(doc, requestFrame) {
     [0.493, 0.644], [0.515, 0.59], [0.498, 0.525]];
   const fork = [[0.493, 0.644], [0.55, 0.636], [0.586, 0.60], [0.626, 0.594]];
 
-  function drawHairline(ctx, radius, dpr, intent) {
-    const width = Math.max(1.3 / dpr, 0.90, radius * 0.009);
+  function pointAlongCrack(points, progress) {
+    // The main cut moves monotonically down the glass, and its fork to the right.
+    const axis = points === fork ? 0 : 1;
+    const start = points[0][axis], end = points.at(-1)[axis];
+    const target = start + progress * (end - start);
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i];
+      const t = (target - a[axis]) / (b[axis] - a[axis]);
+      if (t <= 1) return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    }
+    return points.at(-1);
+  }
+
+  function drawHairline(ctx, radius, dpr, intent, glint) {
+    const width = Math.max(1.5 / dpr, 1.23, radius * 0.0112);
     ctx.save();
     ctx.lineJoin = ctx.lineCap = "round";
     for (const points of [mainCrack, fork]) {
-      const first = points[0], last = points[points.length - 1];
+      const first = points[0], last = points.at(-1);
       const branch = points === fork;
       // Offset the light lip across the dark cut and fade where it runs out.
       for (const lit of [false, true]) {
-        const offset = lit ? 0.64 * width : 0;
+        const offset = lit ? 0.68 * width : 0;
         const stroke = ctx.createLinearGradient(first[0] * radius, -first[1] * radius,
           last[0] * radius, -last[1] * radius);
-        const rgb = lit ? "197,230,247" : "2,11,20";
-        const alpha = (lit ? 0.80 : 0.93) * (branch ? 0.75 : 1);
+        const rgb = lit ? "211,233,247" : "1,8,16";
+        const alpha = (lit ? 0.87 : 0.96) * (branch ? 0.88 : 1);
         stroke.addColorStop(0, "rgba(" + rgb + "," + alpha + ")");
-        stroke.addColorStop(0.62, "rgba(" + rgb + "," + alpha * (0.82 + 0.16 * intent) + ")");
-        stroke.addColorStop(1, "rgba(" + rgb + ",0)");
+        stroke.addColorStop(0.74, "rgba(" + rgb + "," + alpha * (0.89 + 0.10 * intent) + ")");
+        stroke.addColorStop(1, "rgba(" + rgb + ",0.10)");
         ctx.strokeStyle = stroke;
-        ctx.lineWidth = width * (lit ? 0.70 : 1.32) * (branch ? 0.85 : 1);
+        ctx.lineWidth = width * (lit ? 0.84 : 1.42) * (branch ? 0.86 : 1);
         ctx.beginPath();
         ctx.moveTo(first[0] * radius - offset, -first[1] * radius - 0.25 * offset);
         for (let i = 1; i < points.length; i++) {
@@ -147,6 +160,24 @@ export function createCanvasGlass(doc, requestFrame) {
         }
         ctx.stroke();
       }
+
+      // The final path is the reflective lip. Confine the traveling reflection
+      // to it, splitting off only once the light passes the fork's junction.
+      if (!(glint >= 0 && glint < 1)) continue;
+      const pass = branch ? (glint - 0.657) / 0.32 : glint;
+      if (pass < 0 || pass >= 1) continue;
+      const [u, v] = pointAlongCrack(points, pass);
+      const x = u * radius - 0.68 * width, y = -v * radius - 0.17 * width;
+      const spread = Math.max(3.2, radius * (branch ? 0.071 : 0.106));
+      const intensity = Math.min(1, pass * 10, (1 - pass) * 10);
+      const light = ctx.createRadialGradient(x, y, 0, x, y, spread);
+      light.addColorStop(0, "rgba(251,253,255," + intensity + ")");
+      light.addColorStop(0.32, "rgba(232,247,255," + intensity * 0.94 + ")");
+      light.addColorStop(0.64, "rgba(164,216,250," + intensity * 0.64 + ")");
+      light.addColorStop(1, "rgba(151,207,242,0)");
+      ctx.strokeStyle = light;
+      ctx.lineWidth = width * (branch ? 1.38 : 1.90);
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -203,7 +234,7 @@ export function createCanvasGlass(doc, requestFrame) {
     ctx.globalAlpha = opacity * 0.82;
     ctx.drawImage(moving, -radius, -radius, 2 * radius, 2 * radius);
     ctx.restore();
-    drawHairline(ctx, radius, dpr, state.orbIntent || 0);
+    drawHairline(ctx, radius, dpr, state.orbIntent || 0, intact ? state.crackGlint : -1);
     ctx.restore();
 
     if (!intact && shards) {
