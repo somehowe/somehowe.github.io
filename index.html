@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#020306">
-  <meta name="description" content="Ryan Howe’s personal website. Trace the constellations and break a glass orb into a ring of stardust. Find Ryan on GitHub, LinkedIn, or by email.">
+  <meta name="description" content="Ryan Howe’s personal website. Watch a falling glass orb strike his name and reveal a black hole. Find Ryan on GitHub, LinkedIn, or by email.">
   <meta property="og:title" content="Ryan Howe">
   <meta property="og:description" content="An interactive gravitational lens and a few ways to get in touch.">
   <title>Ryan Howe</title>
   <link rel="license" href="/assets/THIRD-PARTY-LICENSES.txt">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/space.css?v=8d76d96">
+  <link rel="stylesheet" href="/assets/space.css?v=bdbd823">
 </head>
 <body>
   <main id="space-home" aria-labelledby="contact-name">
     <section id="contact" aria-labelledby="contact-name">
-      <h1 id="contact-name">Ryan Howe</h1>
+      <h1 id="contact-name"><span class="name-typeset">Ryan Howe</span></h1>
       <nav aria-label="Contact Ryan">
         <a href="https://github.com/somehowe" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://www.linkedin.com/in/ryan-howe-b8230034b/" target="_blank" rel="noopener noreferrer">LinkedIn</a>
@@ -33,12 +33,13 @@
     <p id="instructions" hidden>Move across the sky to trace stars. Drag or use the arrow keys to orbit. Press Home to reset the view.</p>
     <footer id="scene-tools" hidden>
       <div class="playback">
+        <button id="replay-drop" type="button" hidden>Replay drop</button>
         <button id="reform" type="button" hidden>Re-form orb</button>
         <button id="motion" type="button" aria-label="Pause animation" title="Pause animation"><i aria-hidden="true"></i></button>
       </div>
     </footer>
     <p class="sr-only" role="status" id="orb-status"></p>
   </main>
-  <script type="module" src="/assets/space.js?v=8baf4fb"></script>
+  <script type="module" onerror="document.getElementById('space-home').setAttribute('data-static','')" src="/assets/space.js?v=254d35c"></script>
 </body>
 </html>

@@ -140,7 +140,8 @@ export const orbFragmentShader = `
 `;
 
 export function createGlassOrb(THREE, sceneUniforms, requestRedraw) {
-  const { viewport, lensCenter, orbRadius, dpr, parallax } = sceneUniforms;
+  const { viewport, orbRadius, dpr, parallax } = sceneUniforms;
+  const lensCenter = { value: new THREE.Vector2() };
   const uniforms = {
     viewport, lensCenter, orbRadius, dpr, parallax,
     shellOpacity: { value: 1 },
@@ -189,9 +190,15 @@ export function createGlassOrb(THREE, sceneUniforms, requestRedraw) {
     const radius = Math.ceil(orbRadius.value * dpr.value * 3) + 1;
     const x = Math.round(lensCenter.value.x * dpr.value);
     const y = Math.round(bufferSize.y - lensCenter.value.y * dpr.value);
-    const origin = uniforms.frameOrigin.value.set(Math.max(0, x - radius), Math.max(0, y - radius));
-    const width = Math.min(bufferSize.x, x + radius) - origin.x;
-    const height = Math.min(bufferSize.y, y + radius) - origin.y;
+    // Slide a fixed-size capture inside the buffer, including at the top and bottom
+    // of the fall. A clipped capture would reallocate a texture on each frame.
+    const width = Math.min(2 * radius, bufferSize.x);
+    const height = Math.min(2 * radius, bufferSize.y);
+    if (!width || !height) return;
+    const origin = uniforms.frameOrigin.value.set(
+      THREE.MathUtils.clamp(x - radius, 0, bufferSize.x - width),
+      THREE.MathUtils.clamp(y - radius, 0, bufferSize.y - height)
+    );
     let frame = uniforms.starLayer.value;
     if (!frame || frame.image.width !== width || frame.image.height !== height) {
       frame?.dispose();
@@ -204,11 +211,15 @@ export function createGlassOrb(THREE, sceneUniforms, requestRedraw) {
   };
 
   function update(state) {
+    lensCenter.value.copy(sceneUniforms.lensCenter.value);
+    if (Number.isFinite(state.introOrbY)) lensCenter.value.y = state.introOrbY;
     uniforms.orbIntent.value = state.orbIntent || 0;
     uniforms.glintHead.value = Math.max(0, state.crackGlint || 0);
     const age = Number.isFinite(state.breakAge) ? state.breakAge : 0;
     uniforms.shellOpacity.value = 1 - THREE.MathUtils.smoothstep(age, .045, .29);
-    mesh.visible = uniforms.shellOpacity.value > 0;
+    const reach = orbRadius.value + 1 / dpr.value;
+    mesh.visible = uniforms.shellOpacity.value > 0
+      && lensCenter.value.y + reach > 0 && lensCenter.value.y - reach < viewport.value.y;
   }
 
   function dispose() {

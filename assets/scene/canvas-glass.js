@@ -1,5 +1,5 @@
-// The sky photograph is a CSS background. Cache its refraction once per layout;
-// only the transparent layer of moving stars needs to be copied each frame.
+// The sky photograph is a CSS background. Cache its source pixels and the glass
+// optics separately, so the falling orb can sample the sky at its current height.
 export function createCanvasGlass(doc, requestFrame) {
   const world = doc.defaultView;
   const surface = doc.createElement("canvas");
@@ -11,28 +11,39 @@ export function createCanvasGlass(doc, requestFrame) {
   const image = doc.createElement("img");
   let sourceURL = "";
   let layoutKey = "";
+  let renderAtHeight;
 
   image.addEventListener("load", () => {
     layoutKey = "";
     requestFrame();
   });
 
-  function bake(width, height, cx, cy, radius, size) {
+  function prepareSurface(width, height, cx, radius, size) {
     // Match background-size: cover and background-position: 50% 36%.
     const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
     const left = (width - image.naturalWidth * scale) * 0.5;
     const top = (height - image.naturalHeight * scale) * 0.36;
     const extent = radius * 2.4;
     const sampleSize = Math.ceil(size * 1.9);
-    source.width = source.height = sampleSize;
+    // Keep one strip through the entire fall; no canvas readback during motion.
+    const density = sampleSize / (extent * 2);
+    const margin = extent + radius;
+    source.width = sampleSize;
+    source.height = Math.ceil((height + 2 * margin) * density) + 2;
     sourceContext.fillStyle = "#020306";
-    sourceContext.fillRect(0, 0, sampleSize, sampleSize);
-    sourceContext.drawImage(image, (cx - extent - left) / scale, (cy - extent - top) / scale,
-      2 * extent / scale, 2 * extent / scale, 0, 0, sampleSize, sampleSize);
-    const sky = sourceContext.getImageData(0, 0, sampleSize, sampleSize).data;
+    sourceContext.fillRect(0, 0, source.width, source.height);
+    sourceContext.drawImage(image, (cx - extent - left) / scale, (-margin - top) / scale,
+      2 * extent / scale, source.height / (density * scale), 0, 0, source.width, source.height);
+    const sky = sourceContext.getImageData(0, 0, source.width, source.height).data;
     surface.width = surface.height = size;
     const result = surfaceContext.createImageData(size, size);
     const pixels = result.data;
+    const count = size * size;
+    const refractedPixel = new Int32Array(count), reflectedPixel = new Int32Array(count);
+    const fractionX = new Float32Array(count), fractionY = new Float32Array(count);
+    const transmittedLight = new Float32Array(3 * count);
+    const reflectedLight = new Float32Array(3 * count);
+    const surfaceLight = new Float32Array(3 * count);
     const clamp = value => Math.max(0, Math.min(1, value));
     const smooth = (a, b, value) => {
       const t = clamp((value - a) / (b - a));
@@ -69,13 +80,14 @@ export function createCanvasGlass(doc, requestFrame) {
         const srcX = sourceCenter * (1 - x * offset / 2.4);
         const srcY = sourceCenter * (1 - y * offset / 2.4);
         const x0 = Math.floor(srcX), y0 = Math.floor(srcY);
-        const base = 4 * (y0 * sampleSize + x0);
-        const near = 4 * sampleSize;
-        const fractionX = srcX - x0, fractionY = srcY - y0;
+        const pixel = row * size + col;
+        refractedPixel[pixel] = 4 * (y0 * sampleSize + x0);
+        fractionX[pixel] = srcX - x0;
+        fractionY[pixel] = srcY - y0;
         const fresnel = 0.04 + 0.96 * (1 - z) ** 5;
         const reflectX = Math.round(sourceCenter * (1 + x * z * 1.7));
         const reflectY = Math.round(sourceCenter * (1 + y * z * 1.7));
-        const reflected = 4 * (reflectY * sampleSize + reflectX);
+        reflectedPixel[pixel] = 4 * (reflectY * sampleSize + reflectX);
 
         // Project the oblong source onto the reflected ray, just as on WebGL.
         const rx = 2 * z * x, ry = -2 * z * y, rz = 2 * z * z - 1;
@@ -97,23 +109,45 @@ export function createCanvasGlass(doc, requestFrame) {
         const bandOffset = radial - (0.931 + 0.025 * lx);
         const band = gaussian(bandOffset / 0.033) * (0.13 + 0.71 * foot ** 2.2 + 0.23 * crown);
         const caustic = gaussian(bandOffset / Math.max(0.012, aa * 1.10)) * 0.59 * foot ** 7;
-        const index = 4 * (row * size + col);
         for (let channel = 0; channel < 3; channel++) {
-          const p = base + channel;
-          const upper = sky[p] + fractionX * (sky[p + 4] - sky[p]);
-          const lower = sky[p + near] + fractionX * (sky[p + near + 4] - sky[p + near]);
-          const through = (upper + fractionY * (lower - upper))
-            * (absorption[channel] + (clear[channel] - absorption[channel]) * z);
-          const body = (through + (sky[reflected + channel] - through) * fresnel) * shade;
+          const absorptionFactor = absorption[channel] + (clear[channel] - absorption[channel]) * z;
           const sheen = bodySheen[channel] * volume + spillSheen[channel] * spill
             + stripSheen[channel] * strip + coreSheen[channel] * core + edgeSheen[channel] * edge
             + bandSheen[channel] * band + causticSheen[channel] * caustic;
-          pixels[index + channel] = body + (255 - body) * Math.min(0.99, sheen);
+          const light = Math.min(0.99, sheen);
+          const index = 3 * pixel + channel;
+          transmittedLight[index] = absorptionFactor * (1 - fresnel) * shade * (1 - light);
+          reflectedLight[index] = fresnel * shade * (1 - light);
+          surfaceLight[index] = 255 * light;
         }
-        pixels[index + 3] = 255 * clamp((1 - radial) * size * 0.5 + 0.5);
+        pixels[4 * pixel + 3] = 255 * clamp((1 - radial) * size * 0.5 + 0.5);
       }
     }
-    surfaceContext.putImageData(result, 0, 0);
+
+    const stride = 4 * sampleSize;
+    let lastRow = -1;
+    return cy => {
+      const row = Math.max(0, Math.min(source.height - sampleSize - 1,
+        Math.round((cy + margin - extent) * density)));
+      if (row === lastRow) return;
+      lastRow = row;
+      const offset = row * stride;
+      for (let pixel = 0; pixel < count; pixel++) {
+        const output = pixel * 4;
+        if (!pixels[output + 3]) continue;
+        const base = offset + refractedPixel[pixel], reflection = offset + reflectedPixel[pixel];
+        const fx = fractionX[pixel], fy = fractionY[pixel];
+        for (let channel = 0; channel < 3; channel++) {
+          const p = base + channel;
+          const top = sky[p] + fx * (sky[p + 4] - sky[p]);
+          const bottom = sky[p + stride] + fx * (sky[p + stride + 4] - sky[p + stride]);
+          const index = pixel * 3 + channel;
+          pixels[output + channel] = (top + fy * (bottom - top)) * transmittedLight[index]
+            + sky[reflection + channel] * reflectedLight[index] + surfaceLight[index];
+        }
+      }
+      surfaceContext.putImageData(result, 0, 0);
+    };
   }
 
   // Unit-sphere coordinates (+Y up), shared with the WebGL glass surface.
@@ -208,11 +242,12 @@ export function createCanvasGlass(doc, requestFrame) {
       return;
     }
     const width = ctx.canvas.width / dpr, height = ctx.canvas.height / dpr;
-    const key = [width, height, cx, cy, size, radius].join("/");
+    const key = [width, height, cx, size, radius].join("/");
     if (key !== layoutKey) {
-      bake(width, height, cx, cy, radius, size);
+      renderAtHeight = prepareSurface(width, height, cx, radius, size);
       layoutKey = key;
     }
+    renderAtHeight(cy);
     const extent = radius * 1.34;
     if (moving.width !== size || moving.height !== size) {
       moving.width = moving.height = size;
