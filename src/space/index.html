@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#020306">
+  <meta name="description" content="Ryan Howe’s personal website. Trace the constellations and break a glass orb into a ring of stardust. Find Ryan on GitHub, LinkedIn, or by email.">
+  <meta property="og:title" content="Ryan Howe">
+  <meta property="og:description" content="An interactive gravitational lens and a few ways to get in touch.">
+  <title>Ryan Howe</title>
+  <link rel="license" href="/assets/THIRD-PARTY-LICENSES.txt">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/space.css">
+</head>
+<body>
+  <main id="space-home" aria-labelledby="contact-name">
+    <section id="contact" aria-labelledby="contact-name">
+      <h1 id="contact-name">Ryan Howe</h1>
+      <nav aria-label="Contact Ryan">
+        <a href="https://github.com/somehowe" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://www.linkedin.com/in/ryan-howe-b8230034b/" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+        <a href="mailto:r3howe@uwaterloo.ca">Email</a>
+      </nav>
+    </section>
+    <div id="sky" role="group" aria-label="Interactive night sky">
+      <picture id="still" aria-hidden="true">
+        <source media="(max-aspect-ratio: 4/5)" srcset="/assets/galaxy/scene-portrait.webp">
+        <img src="/assets/galaxy/scene-landscape.webp" alt="" decoding="async">
+      </picture>
+      <canvas id="space-stage" aria-hidden="true"></canvas>
+      <button id="orb-target" type="button" hidden aria-label="Break the glass orb"><span>Break the orb</span></button>
+    </div>
+    <footer id="scene-tools" hidden>
+      <p id="instructions">Drag to trace constellations<span class="sr-only">. Drag the sky or use the arrow keys to orbit. Press Home to reset the view.</span></p>
+      <div class="playback">
+        <button id="reform" type="button" hidden>Re-form orb</button>
+        <button id="motion" type="button" aria-label="Pause animation" title="Pause animation"><i aria-hidden="true"></i></button>
+      </div>
+    </footer>
+    <p class="sr-only" role="status" id="orb-status"></p>
+  </main>
+  <script type="module" src="/assets/space.js"></script>
+</body>
+</html>
