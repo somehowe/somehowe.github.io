@@ -12,7 +12,7 @@ export const orbVertexShader = `
 
 export const orbFragmentShader = `
   uniform vec2 viewport, lensCenter, skySize, frameOrigin, frameExtent, parallax;
-  uniform float orbRadius, shellOpacity, dpr, skyReady;
+  uniform float orbRadius, shellOpacity, dpr, skyReady, orbIntent;
   uniform sampler2D galaxyMap, starLayer;
   varying vec2 disk;
 
@@ -30,6 +30,27 @@ export const orbFragmentShader = `
     vec2 padding = min(uv, 1. - uv) * frameExtent;
     stars *= clamp(min(padding.x, padding.y), 0., 1.);
     return skyAt(pixel) * (1. - stars.a) + stars.rgb;
+  }
+
+  // Distance to the narrow split in the outer surface, in orb-radius units.
+  float segmentDistance(vec2 p, vec2 a, vec2 b) {
+    vec2 edge = b - a;
+    float t = clamp(dot(p - a, edge) / dot(edge, edge), 0., 1.);
+    return length(p - (a + t * edge));
+  }
+
+  float crackDistance(vec2 p) {
+    const vec2 root = vec2(.489,.872), neck = vec2(.49,.85), turn = vec2(.48,.77);
+    const vec2 kink = vec2(.52,.716), fork = vec2(.493,.644), bend = vec2(.515,.59);
+    float mainCut = min(segmentDistance(p,root,neck), segmentDistance(p,neck,turn));
+    mainCut = min(mainCut,segmentDistance(p,turn,kink));
+    mainCut = min(mainCut,segmentDistance(p,kink,fork));
+    mainCut = min(mainCut,segmentDistance(p,fork,bend));
+    mainCut = min(mainCut,segmentDistance(p,bend,vec2(.498,.525)));
+    const vec2 spur = vec2(.55,.636), elbow = vec2(.586,.60), tip = vec2(.626,.594);
+    float branch = min(segmentDistance(p,fork,spur),segmentDistance(p,spur,elbow));
+    branch = min(branch,segmentDistance(p,elbow,tip));
+    return min(mainCut,branch * 1.3);
   }
 
   void main() {
@@ -91,6 +112,17 @@ export const orbFragmentShader = `
     // While the photograph decodes, let the photographic CSS sky show through.
     float opacity = mix(clamp(max(sheen.r, max(sheen.g, sheen.b)), .006, 1.), 1., skyReady);
     if (skyReady < .5) color = sheen / opacity;
+    if (xy.x > .43 && xy.x < .67 && xy.y > .49 && xy.y < .91) {
+      // Light catches one lip. Its shadow remains visible over bright stars.
+      float halfWidth = clamp(orbRadius * .0035, .39, .68) / orbRadius;
+      float taper = smoothstep(.521, .57, xy.y) * (1. - smoothstep(.57,.632,xy.x));
+      float stroke = halfWidth * mix(.38, 1., taper);
+      float dark = 1. - smoothstep(stroke * .5, stroke + aa, crackDistance(xy));
+      vec2 relief = vec2(-.72,.26) * halfWidth * 1.9;
+      float lip = 1. - smoothstep(stroke * .28, stroke * .80 + aa, crackDistance(xy - relief));
+      color *= 1. - (.55 + .14 * orbIntent) * taper * dark;
+      color = mix(color, vec3(.76, .88, .94), (.55 + .28 * orbIntent) * taper * lip);
+    }
     gl_FragColor = vec4(color, opacity * coverage * shellOpacity);
   }
 `;
@@ -100,6 +132,7 @@ export function createGlassOrb(THREE, sceneUniforms, requestRedraw) {
   const uniforms = {
     viewport, lensCenter, orbRadius, dpr, parallax,
     shellOpacity: { value: 1 },
+    orbIntent: { value: 0 },
     skyReady: { value: 0 },
     skySize: { value: new THREE.Vector2(1, 1) },
     galaxyMap: { value: null },
@@ -158,6 +191,7 @@ export function createGlassOrb(THREE, sceneUniforms, requestRedraw) {
   };
 
   function update(state) {
+    uniforms.orbIntent.value = state.orbIntent || 0;
     const age = Number.isFinite(state.breakAge) ? state.breakAge : 0;
     uniforms.shellOpacity.value = 1 - THREE.MathUtils.smoothstep(age, .045, .29);
     mesh.visible = uniforms.shellOpacity.value > 0;

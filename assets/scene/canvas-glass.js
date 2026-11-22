@@ -116,6 +116,41 @@ export function createCanvasGlass(doc, requestFrame) {
     surfaceContext.putImageData(result, 0, 0);
   }
 
+  // Unit-sphere coordinates (+Y up), shared with the WebGL glass surface.
+  const mainCrack = [[0.489, 0.872], [0.49, 0.85], [0.48, 0.77], [0.52, 0.716],
+    [0.493, 0.644], [0.515, 0.59], [0.498, 0.525]];
+  const fork = [[0.493, 0.644], [0.55, 0.636], [0.586, 0.60], [0.626, 0.594]];
+
+  function drawHairline(ctx, radius, dpr, intent) {
+    const width = Math.max(1.3 / dpr, 0.90, radius * 0.009);
+    ctx.save();
+    ctx.lineJoin = ctx.lineCap = "round";
+    for (const points of [mainCrack, fork]) {
+      const first = points[0], last = points[points.length - 1];
+      const branch = points === fork;
+      // Offset the light lip across the dark cut and fade where it runs out.
+      for (const lit of [false, true]) {
+        const offset = lit ? 0.64 * width : 0;
+        const stroke = ctx.createLinearGradient(first[0] * radius, -first[1] * radius,
+          last[0] * radius, -last[1] * radius);
+        const rgb = lit ? "197,230,247" : "2,11,20";
+        const alpha = (lit ? 0.80 : 0.93) * (branch ? 0.75 : 1);
+        stroke.addColorStop(0, "rgba(" + rgb + "," + alpha + ")");
+        stroke.addColorStop(0.62, "rgba(" + rgb + "," + alpha * (0.82 + 0.16 * intent) + ")");
+        stroke.addColorStop(1, "rgba(" + rgb + ",0)");
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = width * (lit ? 0.70 : 1.32) * (branch ? 0.85 : 1);
+        ctx.beginPath();
+        ctx.moveTo(first[0] * radius - offset, -first[1] * radius - 0.25 * offset);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i][0] * radius - offset, -points[i][1] * radius - 0.25 * offset);
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   return function drawGlass(ctx, layout, radius, dpr, state, shards) {
     if (!surfaceContext || !sourceContext || !movingContext) return;
     const intact = !Number.isFinite(state.breakAge);
@@ -163,25 +198,26 @@ export function createCanvasGlass(doc, requestFrame) {
     ctx.beginPath();
     ctx.arc(0, 0, radius - 0.5 / dpr, 0, Math.PI * 2);
     ctx.clip();
+    ctx.save();
     ctx.scale(-1, -1);
     ctx.globalAlpha = opacity * 0.82;
     ctx.drawImage(moving, -radius, -radius, 2 * radius, 2 * radius);
     ctx.restore();
+    drawHairline(ctx, radius, dpr, state.orbIntent || 0);
+    ctx.restore();
 
-    if (shards) {
-      // The hairline follows the actual cut that will release on impact.
+    if (!intact && shards) {
+      // Follow the fracture wave across released faces after impact.
       ctx.save();
       ctx.lineCap = "round";
       for (let face = 0; face < shards.count; face++) {
         if (shards.normals[3 * face + 2] < 0.08) continue;
         const flash = shards.crackLight[face];
+        if (flash < 0.012) continue;
         const offset = 9 * face;
         for (let edge = 0; edge < 3; edge++) {
-          const seam = shards.seamEdges[3 * face + edge] * (state.orbIntent || 0) * 0.30;
-          const strength = Math.max(seam, flash);
-          if (strength < 0.012) continue;
           const from = offset + 3 * edge, to = offset + 3 * ((edge + 1) % 3);
-          ctx.strokeStyle = "rgba(211,234,247," + opacity * strength + ")";
+          ctx.strokeStyle = "rgba(211,234,247," + opacity * flash + ")";
           ctx.lineWidth = flash > 0.1 ? 1.15 : 0.62;
           ctx.beginPath();
           ctx.moveTo(shards.positions[from], shards.positions[from + 1]);
