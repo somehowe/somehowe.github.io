@@ -33,11 +33,15 @@ body { margin: 0; }
   cursor: pointer; font: inherit; -webkit-tap-highlight-color: transparent;
 }
 #orb-target span {
+  display: none; pointer-events: none;
   position: absolute; top: calc(100% + 9px); left: 50%; transform: translateX(-50%);
-  padding: 4px 10px; white-space: nowrap; font-size: .82rem; letter-spacing: .035em;
+  white-space: nowrap; font-size: .82rem; letter-spacing: .035em;
   line-height: 1.4; text-shadow: 0 1px 8px #01030a;
 }
-#orb-target:hover span, #orb-target:focus-visible span { color: #ffdfbc; text-decoration: underline; text-underline-offset: .35em; }
+#orb-target:focus-visible .key-hint { display: block; }
+@media (hover: none) and (pointer: coarse) {
+  #orb-target:not([data-discovered]):not(:focus-visible) .touch-hint { display: block; }
+}
 #orb-target:focus-visible { border-radius: 50%; outline-offset: 6px; }
 #sky[tabindex] { cursor: grab; }
 #sky[data-dragging] { cursor: grabbing; }
@@ -51,7 +55,7 @@ body { margin: 0; }
 h1 {
   margin: 0; color: #f6f4f0; font-weight: 400;
   font-size: clamp(4.25rem,7.4vw,8.8rem); line-height: 1.1;
-  letter-spacing: -.072em; text-shadow: 0 2px 18px #020306;
+  letter-spacing: -.072em; word-spacing: .065em; text-shadow: 0 2px 18px #020306;
 }
 nav { display: inline-flex; align-items: center; margin-top: clamp(.7rem,1.9vh,1.6rem); }
 nav a { position: relative; display: inline-flex; align-items: center; min-height: 44px;
@@ -62,13 +66,8 @@ nav a + a::before { content: ''; position: absolute; left: -1px; top: calc(50% -
 nav a:hover { color: #fbd9b3; text-decoration: underline; text-underline-offset: .38em; text-decoration-thickness: 1px; }
 nav a:focus-visible, button:focus-visible { outline: 2px solid #dab58e; outline-offset: 3px; border-radius: 3px; }
 #scene-tools {
-  position: absolute; z-index: 1; left: max(22px,env(safe-area-inset-left)); right: max(18px,env(safe-area-inset-right));
-  bottom: max(12px,env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between;
-  gap: 14px; pointer-events: none;
-}
-#instructions {
-  margin: 0; color: #bdc2c9; font-size: .75rem; line-height: 1.55; letter-spacing: .015em;
-  text-shadow: 0 0 1px #020306, 0 0 3px #020306;
+  position: absolute; z-index: 1; right: max(18px,env(safe-area-inset-right));
+  bottom: max(12px,env(safe-area-inset-bottom)); pointer-events: none;
 }
 .playback { display: flex; align-items: center; flex-shrink: 0; gap: 4px; }
 #reform { min-height: 44px; padding: 0 7px; font: inherit; font-size: .8rem; border: 0;

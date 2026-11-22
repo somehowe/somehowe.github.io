@@ -83,6 +83,28 @@ function makeShell() {
   return {points,facets};
 }
 
+// Pick one short fault from the shell's existing joins. The connected path is
+// selected once in body space; it rotates with the glass and never becomes a
+// screen-space overlay or a second wireframe around the whole mesh.
+function shellSeam(facets) {
+  // The seeded shell is art-directed: this short front-side fault follows
+  // joins 34→32→41. Keep its two connected physical edges, not a wireframe.
+  const chain=[34,32,41];
+  const joins=new Map();
+  for(let edge=0;edge<chain.length-1;edge++) {
+    const a=chain[edge],b=chain[edge+1];
+    joins.set(`${Math.min(a,b)}/${Math.max(a,b)}`,.72+.28*Math.sin(Math.PI*(edge+.5)/(chain.length-1)));
+  }
+  const weights=new Float32Array(facets.length*3);
+  facets.forEach(({indices},face)=>{
+    for(let edge=0;edge<3;edge++) {
+      const a=indices[edge],b=indices[(edge+1)%3];
+      weights[face*3+edge]=joins.get(`${Math.min(a,b)}/${Math.max(a,b)}`)||0;
+    }
+  });
+  return weights;
+}
+
 // A few broad and narrow studio reflections read as curved strips across the
 // intact facets. Their motion follows each fragment's changing 3D normal.
 function lightFace(result,i,nx,ny,nz,depth,settled,frost) {
@@ -114,7 +136,7 @@ export function createOrb() {
   const result={count,positions:new Float32Array(count*9), normals:new Float32Array(count*3),
     colors:new Float32Array(count*3), opacity:new Float32Array(count),depth:new Float32Array(count),
     orbits:Float32Array.from(facets,f=>f.orbit), erosionEnds:Float32Array.from(facets,f=>f.erosionEnd),
-    erosion:new Float32Array(count),
+    erosion:new Float32Array(count),seamEdges:shellSeam(facets),seamStrength:0,
     radius:0,fracture:0,settled:0,disk:0,update};
 
   function update(lens,frame={}) {
@@ -131,6 +153,10 @@ export function createOrb() {
       rotated[k+2]=sp*y+cp*side;
     }
     Object.assign(result,orbStages(age));
+    // Pointer/focus intent changes only the reflected light. Once the real
+    // joins open, the same attached edges quietly lose their identifying glint.
+    const intent=Number.isFinite(frame.orbIntent)?clamp(frame.orbIntent):0;
+    result.seamStrength=(.13+.41*intent)*(1-smooth(.02,.42,age));
     const R=result.radius=orbRadius(lens);
     const dc=Math.cos(lens.angle),ds=Math.sin(lens.angle),incl=lens.inclination;
     const tilt=Math.sqrt(Math.max(0,1-incl*incl));

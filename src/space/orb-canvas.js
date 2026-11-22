@@ -304,6 +304,26 @@ export function createCrystalCanvas(ownerDocument) {
         context.lineWidth=clamp(radius*.0065,.42,1.0);
         context.stroke();
       }
+      if(orb.seamStrength>.001 && nz>.025) {
+        // The same sparse edge mask used by WebGL follows the actual pane
+        // corners. Clip each half of a shared bevel to its own visible face.
+        const seam=orb.seamEdges;
+        if(seam[n] || seam[n+1] || seam[n+2]) {
+          context.save();
+          context.beginPath();context.moveTo(x0,y0);context.lineTo(x1,y1);context.lineTo(x2,y2);context.closePath();
+          context.clip();
+          context.lineWidth=clamp(radius*.0075,.55,.85);
+          context.lineCap='round';
+          const facing=clamp((nz-.025)/.225);
+          for(let edge=0;edge<3;edge++)if(seam[n+edge]) {
+            const next=(edge+1)%3;
+            context.beginPath();context.moveTo(x[edge],y[edge]);context.lineTo(x[next],y[next]);
+            context.strokeStyle=rgba(181,218,237,orb.seamStrength*seam[n+edge]*facing);
+            context.stroke();
+          }
+          context.restore();
+        }
+      }
     }
     context.restore();
   }

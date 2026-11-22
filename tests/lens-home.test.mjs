@@ -148,13 +148,43 @@ test('orb activation turns on the fracture clock, survives context loss, and can
   reset.click();ui.tick(2300);
   assert.equal(fallback.frames.at(-1).breakAge,null);
   assert.equal(ui.doc.activeElement,button);
+  assert.ok(button.hasAttribute('data-discovered'),'re-forming the orb does not repeat the touch hint');
   button.click();ui.tick(2400);
+  assert.equal(ui.doc.activeElement,reset);
   const still=fallback.frames.at(-1);
   assert.ok(still.breakAge>=dustOnlyAge,'paused activation shows only dust');
   const lens=sampleLens(800,600,{...still,yaw:0,pitch:0,brushX:0,brushY:0});
   assert.ok(Math.hypot(lens.sourceX-lens.cx,lens.sourceY-lens.cy)<1e-6);
   assert.match(ui.doc.querySelector('#orb-status').textContent,/has dissolved/);
   checkContacts(ui);
+});
+
+test('the glass responds to inspection independently of the fracture clock', async t=>{
+  const ui=page(t,{reduced:true});
+  await ui.start();
+  const button=ui.doc.querySelector('#orb-target');
+  const scene=ui.scenes.at(-1);
+  const description=ui.doc.getElementById(ui.sky.getAttribute('aria-describedby'));
+  assert.ok(description.hidden);
+  assert.equal(ui.doc.querySelector('#scene-tools').contains(description),false);
+  assert.equal(button.getAttribute('aria-label'),'Break the glass orb');
+  assert.equal(button.hasAttribute('data-discovered'),false);
+  ui.tick(0);
+  ui.point('pointerenter',400,216,button);
+  ui.tick(20);
+  assert.equal(scene.frames.at(-1).orbIntent,1);
+  assert.equal(scene.frames.at(-1).breakAge,null);
+  assert.equal(ui.queue.size,0,'paused inspection does not start a rendering loop');
+  ui.point('pointerleave',410,100,button);
+  ui.tick(40);
+  assert.equal(scene.frames.at(-1).orbIntent,0);
+  button.focus();
+  ui.tick(60);
+  assert.equal(scene.frames.at(-1).orbIntent,1);
+  button.click();
+  ui.tick(80);
+  assert.equal(scene.frames.at(-1).orbIntent,0);
+  assert.ok(button.hasAttribute('data-discovered'));
 });
 
 test('hover, pressed mouse drags, and touch swipes trace in sky coordinates', async t=>{

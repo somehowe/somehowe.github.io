@@ -37,6 +37,47 @@ test('the intact triangles form a closed sphere with outward normals', () => {
   for (const adjacent of edges.values()) assert.equal(adjacent,2);
 });
 
+test('the deliberate seam is two joined real mesh edges and responds without changing the pose',()=>{
+  const orb=createOrb().update(lens,{time:2.89});
+  const joins=new Map();
+  const vertex=(face,corner)=>{
+    const start=face*9+corner*3;
+    return Array.from(orb.positions.subarray(start,start+3),value=>Math.round(value*1000)).join('/');
+  };
+  for(let face=0;face<orb.count;face++)for(let edge=0;edge<3;edge++) {
+    const weight=orb.seamEdges[face*3+edge];
+    if(!weight)continue;
+    const a=vertex(face,edge),b=vertex(face,(edge+1)%3),key=[a,b].sort().join('|');
+    const join=joins.get(key)||{a,b,weights:[]};
+    join.weights.push(weight);joins.set(key,join);
+  }
+  assert.equal(joins.size,2,'the art-directed 34→32→41 path must remain present');
+  const degrees=new Map();
+  for(const {a,b,weights} of joins.values()) {
+    assert.equal(weights.length,2,'each join must belong to both neighboring facets');
+    assert.equal(weights[0],weights[1]);
+    for(const vertex of [a,b])degrees.set(vertex,(degrees.get(vertex)||0)+1);
+  }
+  assert.deepEqual([...degrees.values()].sort(),[1,1,2],'the seam is one short connected fault');
+  const positions=orb.positions.slice(),mask=orb.seamEdges,quiet=orb.seamStrength;
+  orb.update(lens,{time:2.89,orbIntent:1});
+  assert.ok(orb.seamStrength>quiet && orb.seamStrength<.6);
+  assert.deepEqual(orb.positions,positions);
+  assert.equal(orb.seamEdges,mask,'the static edge buffer is reused');
+  const intended=orb.seamStrength;
+  orb.update(lens,{time:2.89,orbIntent:1,breakAge:0,reduceMotion:true});
+  assert.equal(orb.seamStrength,intended);
+  assert.deepEqual(orb.positions,positions,'release begins in the same attached pose');
+  orb.update(lens,{time:3.09,orbIntent:1,breakAge:.2});
+  assert.ok(orb.seamStrength>0 && orb.seamStrength<intended);
+  const strength=orb.seamStrength,broken=orb.positions.slice();
+  orb.update(lens,{time:3.09,orbIntent:1,breakAge:.2,reduceMotion:true});
+  assert.equal(orb.seamStrength,strength);
+  assert.deepEqual(orb.positions,broken);
+  orb.update(lens,{time:3.39,orbIntent:1,breakAge:.5});
+  assert.equal(orb.seamStrength,0,'the identifying glint yields to the actual open fractures');
+});
+
 function longestEdge(positions,face) {
   const k=face*9;
   return Math.max(edgeLength(positions,k,k+3),edgeLength(positions,k+3,k+6),edgeLength(positions,k+6,k));

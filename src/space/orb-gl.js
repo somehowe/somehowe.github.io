@@ -3,15 +3,16 @@ import { createOrb, dustOnlyAge, erosionStartAge } from './orb.js';
 const vertexShader=/* glsl */ `
   uniform vec2 viewport,lensCenter;
   uniform float orbRadius;
-  attribute vec3 glassNormal,glassTint,barycentric;
+  attribute vec3 glassNormal,glassTint,barycentric,fractureJoin;
   attribute vec2 optical;
-  varying vec3 faceNormal,spherePoint,facetTint,bary;
+  varying vec3 faceNormal,spherePoint,facetTint,bary,joinedEdges;
   varying float faceKind,visibility,depth;
   void main() {
     faceNormal=glassNormal*vec3(1.,-1.,1.);
     spherePoint=vec3((position.xy-lensCenter)*vec2(1.,-1.),position.z)/orbRadius;
     facetTint=glassTint;
     bary=barycentric;
+    joinedEdges=fractureJoin;
     faceKind=optical.x;
     visibility=optical.y;
     depth=position.z;
@@ -19,8 +20,8 @@ const vertexShader=/* glsl */ `
   }`;
 
 const fragmentShader=/* glsl */ `
-  uniform float orbRadius,orbFracture,orbSettled,depthPass,dpr;
-  varying vec3 faceNormal,spherePoint,facetTint,bary;
+  uniform float orbRadius,orbFracture,orbSettled,orbSeamStrength,depthPass,dpr;
+  varying vec3 faceNormal,spherePoint,facetTint,bary,joinedEdges;
   varying float faceKind,visibility,depth;
 
   // A narrow white source, a cool wash overhead and the warm equatorial gas
@@ -115,6 +116,12 @@ const fragmentShader=/* glsl */ `
     vec3 bevel=mix(vec3(.52,.81,1.),vec3(1.,.73,.42),warmSide);
     float crack=sin(orbFracture*3.14159)*exp(-4.*orbFracture);
     glass+=bevel*edge*(.030+.12*fresnel+.64*crack+.33*orbFracture);
+    // This mask belongs to just a few shared outer-face edges. Drawing it in
+    // the glass material retains the same depth pass, facing and occlusion as
+    // the surface itself; no hovering line or always-visible sprite is added.
+    vec3 fault=(1.-smoothstep(vec3(.06*dpr),vec3(.51*dpr),distanceToEdge))*joinedEdges;
+    float joined=max(fault.x,max(fault.y,fault.z))*smoothstep(.025,.25,facet.z);
+    glass+=vec3(.55,.77,.91)*joined*orbSeamStrength;
     vec3 exposed=1.-exp(-glass*(1.52+.43*orbSettled));
     float alpha=mix(.78+.16*fresnel,.83+.10*fresnel,orbFracture);
     if(inside) alpha*=mix(.43,.95,orbFracture);
@@ -298,6 +305,16 @@ export function createGlassOrb(THREE,uniforms) {
   const bary=new Float32Array(vertexCount*3);
   for(let i=0;i<vertexCount;i++) bary[3*i+i%3]=1;
   geometry.setAttribute('barycentric',new THREE.BufferAttribute(bary,3));
+  const seam=new Float32Array(vertexCount*3);
+  for(let face=0;face<orb.count;face++)for(let corner=0;corner<3;corner++) {
+    const at=(face*verticesPerFacet+verticesPerFacet-3+corner)*3;
+    // Barycentric channel i measures distance from the edge opposite corner i.
+    seam[at]=orb.seamEdges[face*3+1];
+    seam[at+1]=orb.seamEdges[face*3+2];
+    seam[at+2]=orb.seamEdges[face*3];
+  }
+  geometry.setAttribute('fractureJoin',new THREE.BufferAttribute(seam,3));
+  const seamStrength={value:0};
   const index=new THREE.BufferAttribute(new Uint16Array(vertexCount),1).setUsage(THREE.DynamicDrawUsage);
   geometry.setIndex(index);
   const sorted=Array.from({length:orb.count},(_,i)=>i);
@@ -306,7 +323,7 @@ export function createGlassOrb(THREE,uniforms) {
 
   function pass(sign,name) {
     const material=new THREE.ShaderMaterial({
-      uniforms:{...uniforms,depthPass:{value:sign}},vertexShader,fragmentShader,
+      uniforms:{...uniforms,orbSeamStrength:seamStrength,depthPass:{value:sign}},vertexShader,fragmentShader,
       transparent:true,depthWrite:false,depthTest:false,side:THREE.DoubleSide,toneMapped:false
     });
     const mesh=new THREE.Mesh(geometry,material);
@@ -319,6 +336,7 @@ export function createGlassOrb(THREE,uniforms) {
 
   function update(lens,frame) {
     orb.update(lens,frame);
+    seamStrength.value=orb.seamStrength;
     uniforms.orbRadius.value=orb.radius;
     uniforms.orbFracture.value=orb.fracture;
     uniforms.orbSettled.value=orb.settled;

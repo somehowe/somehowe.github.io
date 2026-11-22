@@ -24,9 +24,10 @@ let animation = 0;
 let width = 1, height = 1;
 let pointer, drag, releaseTouch;
 let trail, ignoreOrbClick = false;
+let pointerOnOrb = false, keyboardOnOrb = false;
 const frame = {
   time: stillTime, reduceMotion: !running,
-  yaw:0, pitch:0, brushX:0, brushY:0, breakAge:null
+  yaw:0, pitch:0, brushX:0, brushY:0, breakAge:null, orbIntent:0
 };
 
 function updateMotionButton() {
@@ -54,10 +55,19 @@ function render() {
 function updateOrbControls() {
   orbButton.hidden = tools.hidden || frame.breakAge!==null;
   reformButton.hidden = tools.hidden || frame.breakAge===null;
+  if (orbButton.hidden) {
+    pointerOnOrb = keyboardOnOrb = false;
+  }
 }
 
+orbButton.addEventListener('pointerenter',()=>{ pointerOnOrb=true; queueFrame(); });
+orbButton.addEventListener('pointerleave',()=>{ pointerOnOrb=false; queueFrame(); });
+orbButton.addEventListener('pointercancel',()=>{ pointerOnOrb=false; queueFrame(); });
+orbButton.addEventListener('focus',()=>{ keyboardOnOrb=orbButton.matches(':focus-visible'); queueFrame(); });
+orbButton.addEventListener('blur',()=>{ keyboardOnOrb=false; queueFrame(); });
 orbButton.addEventListener('click',event=>{
   if (orbButton.hidden || (event.detail && ignoreOrbClick)) return;
+  orbButton.setAttribute('data-discovered','');
   // On a paused sky, compose the finished disk with the star's Einstein ring.
   frame.breakAge = running ? 0 : nextAlignment(dustOnlyAge);
   updateOrbControls();
@@ -100,6 +110,9 @@ function tick(timestamp) {
   if (!backend || disposed || document.hidden) return;
   const dt = Math.max(0,Math.min(.1,(timestamp-(previous ?? timestamp))/1000));
   previous = timestamp;
+  const inspecting = (pointerOnOrb || keyboardOnOrb) && !orbButton.hidden && !sky.hasAttribute('data-dragging');
+  const targetIntent = Number(inspecting);
+  frame.orbIntent = running ? targetIntent+(frame.orbIntent-targetIntent)*Math.exp(-dt*12) : targetIntent;
   if (running) {
     frame.time += dt;
     if (frame.breakAge!==null) {
