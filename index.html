@@ -10,7 +10,7 @@
   <title>Ryan Howe</title>
   <link rel="license" href="/assets/THIRD-PARTY-LICENSES.txt">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/space.css">
+  <link rel="stylesheet" href="/assets/space.css?v=1c045b3">
 </head>
 <body>
   <main id="space-home" aria-labelledby="contact-name">
@@ -28,9 +28,8 @@
         <img src="/assets/galaxy/scene-landscape.webp?v=6f171d9" alt="" decoding="async">
       </picture>
       <canvas id="space-stage" aria-hidden="true"></canvas>
-      <button id="orb-target" type="button" hidden aria-label="Break the glass orb">
-        <span class="touch-hint" aria-hidden="true">Tap the glass</span>
-        <span class="key-hint" aria-hidden="true">Break the glass</span>
+      <button id="orb-target" type="button" hidden>
+        <span class="orb-hint"><span class="click-cue">Click</span><span class="tap-cue">Tap</span><span class="key-cue">Press Enter</span> to shatter</span><span class="sr-only"> the glass orb</span>
       </button>
     </div>
     <p id="instructions" hidden>Move across the sky to trace stars. Drag or use the arrow keys to orbit. Press Home to reset the view.</p>
