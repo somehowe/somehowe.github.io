@@ -506,7 +506,7 @@ export function createCosmos(THREE) {
     lensCenter:{value:new THREE.Vector2()},sourceCenter:{value:new THREE.Vector2()},
     einstein:{value:85},sourceSize:{value:4},shadowRadius:{value:55},
     inclination:{value:.31},diskAngle:{value:-.095},azimuth:{value:0},diskBuild:{value:0},
-    orbRadius:{value:70},orbFracture:{value:0},orbSettled:{value:0}
+    orbRadius:{value:70},orbSettled:{value:0}
   };
   const stars=starLayer(THREE,starCatalogue(),uniforms);
   stars.name='Lensed field stars';

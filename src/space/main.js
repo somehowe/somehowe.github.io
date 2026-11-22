@@ -19,7 +19,7 @@ let backend;
 let usingWebGL = false;
 let disposed = false;
 let running = !preference.matches;
-let previous;
+let previous, strikeTime;
 let animation = 0;
 let width = 1, height = 1;
 let pointer, drag, releaseTouch;
@@ -66,19 +66,36 @@ orbButton.addEventListener('pointercancel',()=>{ pointerOnOrb=false; queueFrame(
 orbButton.addEventListener('focus',()=>{ keyboardOnOrb=orbButton.matches(':focus-visible'); queueFrame(); });
 orbButton.addEventListener('blur',()=>{ keyboardOnOrb=false; queueFrame(); });
 orbButton.addEventListener('click',event=>{
-  if (orbButton.hidden || (event.detail && ignoreOrbClick)) return;
+  const fromPointer = Boolean(event.pointerType || event.detail);
+  if (orbButton.hidden || (fromPointer && ignoreOrbClick)) return;
   orbButton.setAttribute('data-discovered','');
+  frame.impactYaw = frame.yaw;
+  frame.impactPitch = frame.pitch;
+  if (fromPointer) {
+    const lens = sampleLens(width,height,frame);
+    const position = local(event);
+    const dx = position.x*width-lens.cx, dy = position.y*height-lens.cy;
+    // The accessible hit target can extend beyond the visible glass on small screens.
+    const radius = Math.max(orbRadius(lens),Math.hypot(dx,dy));
+    frame.impactX = dx/radius;
+    frame.impactY = dy/radius;
+  } else {
+    frame.impactX = -.24;
+    frame.impactY = -.16;
+  }
   // On a paused sky, compose the finished disk with the star's Einstein ring.
   frame.breakAge = running ? 0 : nextAlignment(dustOnlyAge);
+  strikeTime = running ? performance.now() : undefined;
   updateOrbControls();
   orbStatus.textContent = running
     ? 'The glass fragments are orbiting the black hole and dissolving into dust.'
     : dissolvedStatus;
-  if (!event.detail) reformButton.focus({preventScroll:true});
+  if (!fromPointer) reformButton.focus({preventScroll:true});
   queueFrame();
 });
 reformButton.addEventListener('click',event=>{
   frame.breakAge = null;
+  strikeTime = undefined;
   updateOrbControls();
   orbStatus.textContent = 'The glass orb is whole again.';
   if (!event.detail) orbButton.focus({preventScroll:true});
@@ -117,7 +134,10 @@ function tick(timestamp) {
     frame.time += dt;
     if (frame.breakAge!==null) {
       const age = frame.breakAge;
-      frame.breakAge += dt;
+      // Count only time since contact if a click lands near the end of a slow frame.
+      const sinceStrike = strikeTime === undefined ? dt : Math.max(0,(timestamp-strikeTime)/1000);
+      frame.breakAge += Math.min(dt,sinceStrike);
+      strikeTime = undefined;
       if (age<dustOnlyAge && frame.breakAge>=dustOnlyAge) orbStatus.textContent = dissolvedStatus;
     }
     let x=0, y=0;

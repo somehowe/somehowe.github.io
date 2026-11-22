@@ -128,6 +128,67 @@ test('a click starts in the visible pose, pause freezes erosion, and replay rese
   }
 });
 
+test('the struck patch loads first and a narrow branching wave precedes local separation',()=>{
+  const orb=createOrb(),impactX=-.55,impactY=-.18,impactZ=Math.sqrt(1-impactX**2-impactY**2);
+  const sample=age=>orb.update(lens,{time:3+age,breakAge:age,impactX,impactY,impactYaw:0,impactPitch:0});
+  sample(0);
+  const intact=orb.positions.slice(),release=orb.releaseAges.slice();
+  assert.ok(orb.crackLight.every(value=>value===0));
+  assert.ok(orb.separation.every(value=>value===0));
+  const near=[],far=[];
+  for(let face=0;face<orb.count;face++) {
+    const [x,y,z]=center(orb,face),length=Math.hypot(x,y,z);
+    const alignment=(x*impactX+y*impactY+z*impactZ)/length;
+    if(alignment>.75)near.push(face);
+    if(alignment<-.5)far.push(face);
+  }
+  const average=(ids,values)=>ids.reduce((sum,id)=>sum+values[id],0)/ids.length;
+  assert.ok(average(near,release)+.12<average(far,release));
+  sample(.025);
+  const displacement=new Float64Array(orb.count);
+  for(let face=0;face<orb.count;face++) {
+    const start=face*9;
+    for(let corner=0;corner<3;corner++) {
+      const k=start+corner*3;
+      displacement[face]+=Math.hypot(orb.positions[k]-intact[k],orb.positions[k+1]-intact[k+1],orb.positions[k+2]-intact[k+2])/3;
+    }
+  }
+  assert.ok(average(near,displacement)>.5);
+  assert.ok(average(near,displacement)>12*average(far,displacement));
+  const face=near[0];
+  sample(release[face]-.016);
+  const peak=orb.crackLight[face];
+  assert.ok(peak>.1);assert.equal(orb.separation[face],0);
+  sample(release[face]+.07);
+  assert.ok(orb.crackLight[face]<peak*.01);assert.ok(orb.separation[face]>.5);
+  for(const age of [.045,.09,.15,.22,.32,.5]) {
+    sample(age);
+    assert.ok(orb.crackLight.every(value=>value>=0&&value<=1));
+    assert.ok(Array.from(orb.crackLight).filter(value=>value>.05).length<orb.count*.35);
+  }
+  assert.ok(orb.crackLight.every(value=>value===0));
+});
+
+test('strike selection survives camera motion, exact seeks, re-forming, and polar hits',()=>{
+  const impact={impactX:.43,impactY:.12,impactYaw:.2,impactPitch:-.1};
+  const stepped=createOrb(),direct=createOrb();
+  for(let i=0;i<=120;i++)stepped.update(lens,{...impact,time:4+i/60,breakAge:i/60,yaw:.2,pitch:-.1});
+  direct.update(lens,{...impact,time:6,breakAge:2,yaw:.2,pitch:-.1});
+  assert.deepEqual(pose(stepped),pose(direct));
+  stepped.update(lens,{...impact,time:4.12,breakAge:.12,yaw:.2,pitch:-.1});
+  const release=stepped.releaseAges.slice(),light=stepped.crackLight.slice();
+  stepped.update(lens,{...impact,time:4.12,breakAge:.12,yaw:1,pitch:.4});
+  assert.deepEqual(stepped.releaseAges,release);assert.deepEqual(stepped.crackLight,light);
+  const poles={impactX:0,impactY:-.8059723959294514,impactYaw:0,impactPitch:-.699,yaw:0,pitch:-.699};
+  for(const age of [0,.04,.12,.3,1,3,14,30]) {
+    stepped.update(lens,{...poles,time:age,breakAge:age});
+    for(const buffer of [stepped.positions,stepped.normals,stepped.releaseAges,stepped.crackLight])assert.ok(buffer.every(Number.isFinite));
+  }
+  stepped.update(lens,{time:4});direct.update(lens,{time:4});
+  assert.deepEqual(pose(stepped),pose(direct));
+  assert.ok(stepped.releaseAges.every(value=>value===0));
+});
+
 test('facets erode in size order, losing physical extent before they vanish', () => {
   assert.equal(dustOnlyAge,14);
   const orb=createOrb();

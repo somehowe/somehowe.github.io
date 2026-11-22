@@ -95,7 +95,7 @@ export function createCrystalCanvas(ownerDocument) {
     const level=Math.min(levels-1,Math.floor(light*levels/.84));
     batches[pass][hue*levels+level].push(grain);
   }
-  let captureHalf=1, shell=1, rim, hasFacets=true;
+  let captureHalf=1, rim, hasFacets=true;
   // Copy the actual local background once. Each facet sees it through a
   // different refracting plane, so the stream breaks at the facet junctions.
   function prepare(context,lens,frame,pixelRatio) {
@@ -103,8 +103,7 @@ export function createCrystalCanvas(ownerDocument) {
     const age=Number.isFinite(frame.breakAge) ? frame.breakAge : 0;
     hasFacets=age<dustOnlyAge;
     if(hasFacets)order.sort((a,b)=>orb.depth[a]-orb.depth[b]);
-    shell=(1-orb.fracture)**2;
-    if(shell>.01 && sampleContext) {
+    if(hasFacets && sampleContext && orb.separation.some(open=>open<.90)) {
       captureHalf=orb.radius*1.72;
       const resolution=clamp(Math.ceil(captureHalf*2*Math.min(pixelRatio,1.35)),12,128);
       if(sample.width!==resolution || sample.height!==resolution)sample.width=sample.height=resolution;
@@ -181,7 +180,7 @@ export function createCrystalCanvas(ownerDocument) {
   }
 
   function draw(context,lens,front) {
-    const {positions,normals,colors,opacity,depth,radius,fracture,settled}=orb;
+    const {positions,normals,colors,opacity,depth,radius,settled}=orb;
     context.save();
     context.lineJoin='round';
     for(const grain of dust) {
@@ -207,18 +206,45 @@ export function createCrystalCanvas(ownerDocument) {
       if((depth[id]>=0)!==front || opacity[id]<.002)continue;
       const p=id*9,n=id*3;
       const x0=positions[p],y0=positions[p+1],x1=positions[p+3],y1=positions[p+4],x2=positions[p+6],y2=positions[p+7];
-      const area=Math.abs((x1-x0)*(y2-y0)-(y1-y0)*(x2-x0))*.5;
+      const winding=(x1-x0)*(y2-y0)-(y1-y0)*(x2-x0);
+      const area=Math.abs(winding)*.5;
       if(area<.035)continue;
       const x=[x0,x1,x2],y=[y0,y1,y2];
       const nx=normals[n],ny=normals[n+1],nz=normals[n+2];
       const normal=reflection(nx,ny,nz);
       const facing=nx<0 ? 1 : 0;
+      const fracture=orb.separation[id], crack=orb.crackLight[id];
       const quiet=1-fracture;
-      const flash=Math.sin(fracture*Math.PI);
-      const joined=shell*Number(front);
+      const joined=quiet*quiet*Number(front);
       // A faint interior surface sits underneath the ice-colored outer shell.
       const frontLight=clamp(.5+depth[id]/radius);
       const strength=opacity[id]*mix(.55+.45*frontLight,1,fracture);
+      // At release the thin cut wall becomes visible beyond the front pane.
+      // Foreshortening uses the same glass thickness as the WebGL prisms.
+      if(fracture>.02) {
+        let shortestSq=Infinity;
+        for(let k=0;k<3;k++) {
+          const j=(k+1)%3;
+          const ex=x[j]-x[k],ey=y[j]-y[k],ez=positions[p+3*j+2]-positions[p+3*k+2];
+          shortestSq=Math.min(shortestSq,ex*ex+ey*ey+ez*ez);
+        }
+        const reach=Math.sqrt(shortestSq);
+        const thickness=Math.min(.048*radius,.12*reach)*fracture;
+        const direction=nz<0 ? 1 : -1;
+        const dx=direction*nx*thickness,dy=direction*ny*thickness;
+        if(Math.abs(dx)+Math.abs(dy)>.42) {
+          for(let k=0;k<3;k++) {
+            const j=(k+1)%3,ex=x[j]-x[k],ey=y[j]-y[k];
+            if((ex*dy-ey*dx)*winding>=0)continue;
+            const length=Math.hypot(ex,ey)||1;
+            const reflected=clamp(.5+Math.sign(winding)*(.39*ex+.31*ey)/length);
+            context.beginPath();context.moveTo(x[k],y[k]);context.lineTo(x[j],y[j]);
+            context.lineTo(x[j]+dx,y[j]+dy);context.lineTo(x[k]+dx,y[k]+dy);context.closePath();
+            context.fillStyle=rgba(28+94*reflected,53+98*reflected,71+100*reflected,strength*.86);
+            context.fill();
+          }
+        }
+      }
       context.beginPath();
       context.moveTo(x0,y0);context.lineTo(x1,y1);context.lineTo(x2,y2);context.closePath();
       if (joined>.02 && sampleContext) {
@@ -296,13 +322,23 @@ export function createCrystalCanvas(ownerDocument) {
         panel(context,amber,-.024,.036,-.33,.82,'rgba(244,201,143,.55)',-1,-.14);
         context.restore();
       }
-      const edge=clamp((normal.fresnel*.36+normal.softbox*.23+normal.window*.21+.04*facing)*strength+.57*flash);
+      const edge=clamp((normal.fresnel*.36+normal.softbox*.23+normal.window*.21+.04*facing)*strength);
       if(edge>.065) {
         const k=(id+facing)%3, j=(k+1)%3;
         context.beginPath();context.moveTo(x[k],y[k]);context.lineTo(x[j],y[j]);
-        context.strokeStyle=rgba(185+46*flash,220+25*flash,234+16*flash,edge);
+        context.strokeStyle=rgba(185,220,234,edge);
         context.lineWidth=clamp(radius*.0065,.42,1.0);
         context.stroke();
+      }
+      // Reflected light runs along a real triangle at the crack front. The
+      // darker bevel inside the lip keeps the fissure legible on a bright face.
+      if(crack>.012 && nz>.025) {
+        context.save();
+        context.beginPath();context.moveTo(x0,y0);context.lineTo(x1,y1);context.lineTo(x2,y2);context.closePath();
+        context.clip();
+        context.lineWidth=2.7;context.strokeStyle=rgba(8,19,29,.47*crack);context.stroke();
+        context.lineWidth=1.35;context.strokeStyle=rgba(221+20*normal.warm,240,248-16*normal.warm,.96*crack);context.stroke();
+        context.restore();
       }
       if(orb.seamStrength>.001 && nz>.025) {
         // The same sparse edge mask used by WebGL follows the actual pane

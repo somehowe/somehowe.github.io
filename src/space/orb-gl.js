@@ -4,9 +4,9 @@ const vertexShader=/* glsl */ `
   uniform vec2 viewport,lensCenter;
   uniform float orbRadius;
   attribute vec3 glassNormal,glassTint,barycentric,fractureJoin;
-  attribute vec2 optical;
+  attribute vec4 optical;
   varying vec3 faceNormal,spherePoint,facetTint,bary,joinedEdges;
-  varying float faceKind,visibility,depth;
+  varying float faceKind,visibility,depth,crackLight,separation;
   void main() {
     faceNormal=glassNormal*vec3(1.,-1.,1.);
     spherePoint=vec3((position.xy-lensCenter)*vec2(1.,-1.),position.z)/orbRadius;
@@ -15,14 +15,16 @@ const vertexShader=/* glsl */ `
     joinedEdges=fractureJoin;
     faceKind=optical.x;
     visibility=optical.y;
+    crackLight=optical.z;
+    separation=optical.w;
     depth=position.z;
     gl_Position=vec4((position.xy/viewport-.5)*vec2(2.,-2.),0.,1.);
   }`;
 
 const fragmentShader=/* glsl */ `
-  uniform float orbRadius,orbFracture,orbSettled,orbSeamStrength,depthPass,dpr;
+  uniform float orbRadius,orbSettled,orbSeamStrength,depthPass,dpr;
   varying vec3 faceNormal,spherePoint,facetTint,bary,joinedEdges;
-  varying float faceKind,visibility,depth;
+  varying float faceKind,visibility,depth,crackLight,separation;
 
   // A narrow white source, a cool wash overhead and the warm equatorial gas
   // form an environment around the crystal. Sample it on reflected AND
@@ -56,7 +58,7 @@ const fragmentShader=/* glsl */ `
     vec3 radial=normalize(spherePoint);
     bool wall=faceKind>.5;
     bool inside=faceKind<-.5;
-    float rounding=(!wall && !inside) ? .23*(1.-orbFracture) : 0.;
+    float rounding=(!wall && !inside) ? .23*(1.-separation) : 0.;
     vec3 normal=normalize(mix(facet,radial,rounding));
     vec3 eyeRay=vec3(0.,0.,-1.);
     float incidence=max(.015,normal.z);
@@ -71,16 +73,16 @@ const fragmentShader=/* glsl */ `
     vec3 exitNormal=normalize(entry-2.*dot(entry,bent)*bent);
     vec3 exitRay=refract(bent,-exitNormal,1.52);
     if(dot(exitRay,exitRay)<.01) exitRay=reflect(bent,exitNormal);
-    vec3 interior=environment(mix(exitRay,bent,orbFracture));
+    vec3 interior=environment(mix(exitRay,bent,separation));
     vec3 internalReflection=environment(reflect(bent,exitNormal));
     float caustic=exp(-abs(dot(exitRay,normalize(vec3(.25,.91,.21)))+.17)*19.);
-    float opticalDepth=(.32+.68*incidence)*(1.-.69*orbFracture);
+    float opticalDepth=(.32+.68*incidence)*(1.-.69*separation);
     vec3 absorption=exp(-opticalDepth*vec3(1.05,.42,.19));
     vec3 glass=interior*absorption*.55+internalReflection*vec3(.14,.21,.26);
-    glass+=vec3(.018,.055,.083)+vec3(.040,.11,.14)*caustic*(1.-orbFracture);
+    glass+=vec3(.018,.055,.083)+vec3(.040,.11,.14)*caustic*(1.-separation);
     glass=mix(glass,reflected,fresnel)+reflected*(wall?.24:.10);
 
-    if(!wall && !inside && orbFracture<.995) {
+    if(!wall && !inside && separation<.995) {
       // The long reflection of the upper softbox crosses the polished dome.
       // Its edges kink slightly on each neighboring cut and separate as the
       // panels lift. The amber band is transmitted from the seed behind it.
@@ -103,19 +105,32 @@ const fragmentShader=/* glsl */ `
                   vec3(.19,.43,.67)*broad+vec3(.90,1.08,1.19)*hot*2.35+
                   vec3(.35,.63,.83)*twin+vec3(.68,.91,1.)*(skim*(1.35*upper+.75*lower)+slash*.91)+
                   vec3(.77,.34,.09)*transmitted;
-      glass+=(1.-orbFracture)*polish;
+      glass+=(1.-separation)*polish;
     }
 
     // Exposed broken edges catch the hotter gas as their orbital plane fills.
     float hotSide=max(0.,dot(normal,normalize(vec3(.61,-.65,.46))));
-    glass+=orbFracture*(vec3(.025,.074,.10)+vec3(.70,.33,.14)*hotSide*hotSide*.56);
+    glass+=separation*(vec3(.025,.074,.10)+vec3(.70,.33,.14)*hotSide*hotSide*.56);
     glass*=mix(vec3(.84,.90,.96),.64+.54*facetTint,.42);
     vec3 distanceToEdge=bary/max(fwidth(bary),vec3(.0001));
-    float edge=1.-smoothstep(.08*dpr,.72*dpr,min(distanceToEdge.x,min(distanceToEdge.y,distanceToEdge.z)));
+    float nearestEdge=min(distanceToEdge.x,min(distanceToEdge.y,distanceToEdge.z))/dpr;
+    float edge=1.-smoothstep(.08,.72,nearestEdge);
     float warmSide=smoothstep(-.16,.75,normal.x-.5*normal.y);
     vec3 bevel=mix(vec3(.52,.81,1.),vec3(1.,.73,.42),warmSide);
-    float crack=sin(orbFracture*3.14159)*exp(-4.*orbFracture);
-    glass+=bevel*edge*(.030+.12*fresnel+.64*crack+.33*orbFracture);
+    glass+=bevel*edge*(.030+.12*fresnel+.33*separation);
+    // A fresh cut briefly reflects the long white light. The dark shoulder
+    // beside its fine bright lip keeps it readable over a polished highlight.
+    if(crackLight>.001) {
+      vec3 cutLight=mix(vec3(.76,.92,1.),vec3(1.,.90,.72),.38*warmSide);
+      if(wall) {
+        glass+=cutLight*crackLight*(.22+.30*fresnel);
+      } else if(!inside) {
+        float lip=1.-smoothstep(.16,.95,nearestEdge);
+        float shoulder=smoothstep(.30,.95,nearestEdge)*(1.-smoothstep(.95,1.75,nearestEdge));
+        glass*=1.-.38*crackLight*shoulder;
+        glass+=cutLight*crackLight*lip*(1.45+.55*fresnel);
+      }
+    }
     // This mask belongs to just a few shared outer-face edges. Drawing it in
     // the glass material retains the same depth pass, facing and occlusion as
     // the surface itself; no hovering line or always-visible sprite is added.
@@ -123,10 +138,10 @@ const fragmentShader=/* glsl */ `
     float joined=max(fault.x,max(fault.y,fault.z))*smoothstep(.025,.25,facet.z);
     glass+=vec3(.55,.77,.91)*joined*orbSeamStrength;
     vec3 exposed=1.-exp(-glass*(1.52+.43*orbSettled));
-    float alpha=mix(.78+.16*fresnel,.83+.10*fresnel,orbFracture);
-    if(inside) alpha*=mix(.43,.95,orbFracture);
+    float alpha=mix(.78+.16*fresnel,.83+.10*fresnel,separation);
+    if(inside) alpha*=mix(.43,.95,separation);
     float coverage=visibility*alpha;
-    if(!wall && !inside) coverage=mix(coverage,1.,(1.-orbFracture)*.85*smoothstep(.57,.985,exposed.b));
+    if(!wall && !inside) coverage=mix(coverage,1.,(1.-separation)*.85*smoothstep(.57,.985,exposed.b));
     gl_FragColor=vec4(exposed,coverage*depthWeight);
   }`;
 
@@ -193,7 +208,12 @@ function glassDust(THREE,uniforms,count) {
   let haveSpeeds=false;
   function update(lens,frame,orb) {
     const age=frame.breakAge;
-    front.visible=back.visible=Number.isFinite(age)&&age>.12;
+    // Grains are stored in launch-time order. An unlit lane needs neither
+    // vertices nor a second evaluation of its parent shell's earlier pose.
+    let activeLanes=0;
+    while(activeLanes<flights.length && age>flights[activeLanes]+.10)activeLanes++;
+    geometry.setDrawRange(0,activeLanes*2*count);
+    front.visible=back.visible=Number.isFinite(age)&&activeLanes>0;
     if(!front.visible) return;
     const dc=Math.cos(lens.angle),ds=Math.sin(lens.angle),incl=lens.inclination;
     const tilt=Math.sqrt(1.-incl*incl),unit=Math.max(.98,Math.min(2.1,lens.radius*.024));
@@ -224,7 +244,7 @@ function glassDust(THREE,uniforms,count) {
     }
     Object.assign(emissionFrame,frame);
     const detached=age>=dustOnlyAge;
-    for(let lane=0;lane<flights.length;lane++) {
+    for(let lane=0;lane<activeLanes;lane++) {
       const flight=flights[lane],elapsed=Math.max(0,age-flight);
       const onset=THREE.MathUtils.smoothstep(elapsed,.10,.57);
       // Only still-eroding panes need an earlier surface pose for emission.
@@ -301,7 +321,7 @@ export function createGlassOrb(THREE,uniforms) {
     return attribute;
   }
   const position=dynamic('position',3), normal=dynamic('glassNormal',3);
-  const tint=dynamic('glassTint',3), optical=dynamic('optical',2);
+  const tint=dynamic('glassTint',3), optical=dynamic('optical',4);
   const bary=new Float32Array(vertexCount*3);
   for(let i=0;i<vertexCount;i++) bary[3*i+i%3]=1;
   geometry.setAttribute('barycentric',new THREE.BufferAttribute(bary,3));
@@ -338,7 +358,6 @@ export function createGlassOrb(THREE,uniforms) {
     orb.update(lens,frame);
     seamStrength.value=orb.seamStrength;
     uniforms.orbRadius.value=orb.radius;
-    uniforms.orbFracture.value=orb.fracture;
     uniforms.orbSettled.value=orb.settled;
     uniforms.diskBuild.value=orb.disk;
     dust.update(lens,frame,orb);
@@ -350,10 +369,12 @@ export function createGlassOrb(THREE,uniforms) {
     sorted.sort((a,b)=>orb.depth[a]-orb.depth[b]);
     let written=0;
     for(const id of sorted) {
-      const opacity=orb.opacity[id]+(1.-orb.fracture)*(.87-orb.opacity[id]);
+      const separation=orb.separation[id];
+      const opacity=orb.opacity[id]+(1.-separation)*(.87-orb.opacity[id]);
       if(orb.erosion[id]>=1. || opacity<=0.) continue;
       const n=id*3,base=id*9;
       const nx=orb.normals[n],ny=orb.normals[n+1],nz=orb.normals[n+2];
+      const crackLight=orb.crackLight[id];
       let reach=Infinity;
       for(let c=0;c<9;c++) corners[c]=orb.positions[base+c];
       // A side normal is perpendicular to its edge and points away from the
@@ -387,7 +408,7 @@ export function createGlassOrb(THREE,uniforms) {
           position.setXYZ(v,corners[p],corners[p+1],corners[p+2]);
           normal.setXYZ(v,x,y,z);
           tint.setXYZ(v,orb.colors[n],orb.colors[n+1],orb.colors[n+2]);
-          optical.setXY(v,panel.surface,opacity);
+          optical.setXYZW(v,panel.surface,opacity,crackLight,separation);
           index.array[written++]=v++;
         }
       }

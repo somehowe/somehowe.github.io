@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
 import {JSDOM} from 'jsdom';
 import {sampleLens,stillTime} from '../src/space/lens.js';
-import {dustOnlyAge} from '../src/space/orb.js';
+import {dustOnlyAge,orbRadius} from '../src/space/orb.js';
 
 const [html,css,bundle]=await Promise.all([
   readFile('src/space/index.html','utf8'),
@@ -131,14 +131,24 @@ test('orb activation turns on the fracture clock, survives context loss, and can
   ui.point('pointerup',470,232,button);
   button.dispatchEvent(new ui.window.MouseEvent('click',{detail:1,bubbles:true}));
   assert.equal(button.hidden,false,'orbiting from the orb should not break it');
-  ui.point('pointerdown',400,216,button,'touch');
-  ui.point('pointerup',400,216,button,'touch');
-  button.dispatchEvent(new ui.window.MouseEvent('click',{detail:1,bubbles:true}));
+  const lensAtTap=sampleLens(800,600,scene.frames.at(-1));
+  const radius=orbRadius(lensAtTap);
+  const x=lensAtTap.cx-radius*.52, y=lensAtTap.cy+radius*.31;
+  ui.point('pointerdown',x,y,button,'touch');
+  ui.point('pointerup',x,y,button,'touch');
+  button.dispatchEvent(new ui.window.PointerEvent('click',{
+    detail:1,pointerType:'touch',clientX:x+20,clientY:y+30,bubbles:true
+  }));
   assert.equal(button.hidden,true);
   assert.equal(reset.hidden,false);
   ui.tick(100);ui.tick(180);
   const elapsed=scene.frames.at(-1).breakAge;
   assert.ok(elapsed>0 && elapsed<1);
+  const struck=scene.frames.at(-1);
+  assert.ok(Math.abs(struck.impactX+.52)<.02 && Math.abs(struck.impactY-.31)<.02);
+  assert.equal(struck.impactYaw,struck.yaw);
+  ui.key('ArrowRight');ui.tick(180);
+  assert.equal(scene.frames.at(-1).impactYaw,struck.impactYaw,'orbiting preserves the original point on the glass');
   scene.element.dispatchEvent(new ui.window.Event('webglcontextlost',{cancelable:true}));
   const fallback=ui.scenes.at(-1);
   assert.equal(fallback.frames.at(-1).breakAge,elapsed);
@@ -152,6 +162,7 @@ test('orb activation turns on the fracture clock, survives context loss, and can
   button.click();ui.tick(2400);
   assert.equal(ui.doc.activeElement,reset);
   const still=fallback.frames.at(-1);
+  assert.deepEqual([still.impactX,still.impactY],[-.24,-.16],'keyboard activation uses a fresh impact point');
   assert.ok(still.breakAge>=dustOnlyAge,'paused activation shows only dust');
   const lens=sampleLens(800,600,{...still,yaw:0,pitch:0,brushX:0,brushY:0});
   assert.ok(Math.hypot(lens.sourceX-lens.cx,lens.sourceY-lens.cy)<1e-6);
@@ -185,6 +196,19 @@ test('the glass responds to inspection independently of the fracture clock', asy
   ui.tick(80);
   assert.equal(scene.frames.at(-1).orbIntent,0);
   assert.ok(button.hasAttribute('data-discovered'));
+});
+
+test('a strike late in a slow frame still shows the start of the fracture', async t=>{
+  const ui=page(t);
+  await ui.start();
+  ui.tick(100);
+  Object.defineProperty(ui.window.performance,'now',{value:()=>194});
+  ui.doc.querySelector('#orb-target').click();
+  ui.tick(200);
+  const scene=ui.scenes.at(-1);
+  assert.ok(Math.abs(scene.frames.at(-1).breakAge-.006)<1e-6);
+  ui.tick(216);
+  assert.ok(Math.abs(scene.frames.at(-1).breakAge-.022)<1e-6);
 });
 
 test('hover, pressed mouse drags, and touch swipes trace in sky coordinates', async t=>{
