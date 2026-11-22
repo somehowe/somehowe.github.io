@@ -1,0 +1,111 @@
+{
+  "fetchedAt": "2026-11-15T12:07:09Z",
+  "repository": "somehowe/leetcode-practice",
+  "problems": [
+    {
+      "title": "Surrounded Regions",
+      "number": 130,
+      "slug": "surrounded-regions",
+      "path": "0130-surrounded-regions",
+      "date": "2026-11-15T11:11:05Z",
+      "commitUrl": "https://github.com/somehowe/leetcode-practice/commit/6ec34d3bac480d1c4515631d2ee3cf021996ce38",
+      "codeUrl": "https://github.com/somehowe/leetcode-practice/blob/6ec34d3bac480d1c4515631d2ee3cf021996ce38/0130-surrounded-regions/0130-surrounded-regions.cpp",
+      "leetcodeUrl": "https://leetcode.com/problems/surrounded-regions",
+      "topics": [
+        "Array",
+        "Depth-First Search",
+        "Breadth-First Search",
+        "Union-Find",
+        "Matrix"
+      ],
+      "difficulty": "Medium",
+      "sha": "6ec34d3bac480d1c4515631d2ee3cf021996ce38"
+    },
+    {
+      "title": "Minimum Path Sum",
+      "number": 64,
+      "slug": "minimum-path-sum",
+      "path": "0064-minimum-path-sum",
+      "date": "2026-11-14T18:42:54Z",
+      "commitUrl": "https://github.com/somehowe/leetcode-practice/commit/3395cd033cbb8c213b464d436d2d9672debef6fa",
+      "codeUrl": "https://github.com/somehowe/leetcode-practice/blob/3395cd033cbb8c213b464d436d2d9672debef6fa/0064-minimum-path-sum/0064-minimum-path-sum.cpp",
+      "leetcodeUrl": "https://leetcode.com/problems/minimum-path-sum",
+      "topics": [
+        "Array",
+        "Dynamic Programming",
+        "Matrix"
+      ],
+      "difficulty": "Medium",
+      "sha": "3395cd033cbb8c213b464d436d2d9672debef6fa"
+    },
+    {
+      "title": "Best Time to Buy and Sell Stock",
+      "number": 121,
+      "slug": "best-time-to-buy-and-sell-stock",
+      "path": "0121-best-time-to-buy-and-sell-stock",
+      "date": "2026-11-14T00:06:42Z",
+      "commitUrl": "https://github.com/somehowe/leetcode-practice/commit/6803ec4f00f820f2918b90bb354cd734047d4e61",
+      "codeUrl": "https://github.com/somehowe/leetcode-practice/blob/6803ec4f00f820f2918b90bb354cd734047d4e61/0121-best-time-to-buy-and-sell-stock/0121-best-time-to-buy-and-sell-stock.cpp",
+      "leetcodeUrl": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock",
+      "topics": [
+        "Array",
+        "Dynamic Programming"
+      ],
+      "difficulty": "Easy",
+      "sha": "6803ec4f00f820f2918b90bb354cd734047d4e61"
+    },
+    {
+      "title": "Construct Binary Tree from Preorder and Inorder Traversal",
+      "number": 105,
+      "slug": "construct-binary-tree-from-preorder-and-inorder-traversal",
+      "path": "0105-construct-binary-tree-from-preorder-and-inorder-traversal",
+      "date": "2026-11-12T20:53:57Z",
+      "commitUrl": "https://github.com/somehowe/leetcode-practice/commit/cf44a402505f76bbeee9352d02db798e42025d05",
+      "codeUrl": "https://github.com/somehowe/leetcode-practice/blob/cf44a402505f76bbeee9352d02db798e42025d05/0105-construct-binary-tree-from-preorder-and-inorder-traversal/0105-construct-binary-tree-from-preorder-and-inorder-traversal.cpp",
+      "leetcodeUrl": "https://leetcode.com/problems/construct-binary-tree-from-preorder-and-inorder-traversal",
+      "topics": [
+        "Array",
+        "Hash Table",
+        "Tree",
+        "Binary Tree",
+        "Divide and Conquer"
+      ],
+      "difficulty": "Medium",
+      "sha": "cf44a402505f76bbeee9352d02db798e42025d05"
+    },
+    {
+      "title": "Max Consecutive Ones III",
+      "number": 1004,
+      "slug": "max-consecutive-ones-iii",
+      "path": "1004-max-consecutive-ones-iii",
+      "date": "2026-11-11T19:45:05Z",
+      "commitUrl": "https://github.com/somehowe/leetcode-practice/commit/920d40a9f265fb6cac36f014f316ba9443cd62e0",
+      "codeUrl": "https://github.com/somehowe/leetcode-practice/blob/920d40a9f265fb6cac36f014f316ba9443cd62e0/1004-max-consecutive-ones-iii/1004-max-consecutive-ones-iii.cpp",
+      "leetcodeUrl": "https://leetcode.com/problems/max-consecutive-ones-iii",
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Sliding Window",
+        "Prefix Sum"
+      ],
+      "difficulty": "Medium",
+      "sha": "920d40a9f265fb6cac36f014f316ba9443cd62e0"
+    },
+    {
+      "title": "Combination Sum II",
+      "number": 40,
+      "slug": "combination-sum-ii",
+      "path": "0040-combination-sum-ii",
+      "date": "2026-11-10T17:51:27Z",
+      "commitUrl": "https://github.com/somehowe/leetcode-practice/commit/f2e5d4362dd0869f7b62e0df180f17336d6d6611",
+      "codeUrl": "https://github.com/somehowe/leetcode-practice/blob/f2e5d4362dd0869f7b62e0df180f17336d6d6611/0040-combination-sum-ii/0040-combination-sum-ii.cpp",
+      "leetcodeUrl": "https://leetcode.com/problems/combination-sum-ii",
+      "topics": [
+        "Array",
+        "Backtracking"
+      ],
+      "difficulty": "Medium",
+      "sha": "f2e5d4362dd0869f7b62e0df180f17336d6d6611"
+    }
+  ]
+}
