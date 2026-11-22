@@ -13,7 +13,6 @@ export function createOrbDrop(nameImpact) {
   let elapsed = 0;
   let phase = 'fall';
   let stageX = 0, stageY = 0, centerX = 0, restY = 0, radius = 1;
-  let played = false;
 
   function resize(box, center, glassRadius) {
     stageX = box.left + window.scrollX;
@@ -31,24 +30,8 @@ export function createOrbDrop(nameImpact) {
     nameImpact.update(null, 0);
   }
 
-  function start(state) {
-    phase = 'fall';
-    played = true;
-    elapsed = 0;
-    state.breakAge = null;
-    state.crackGlint = -1;
-    resetPose(state);
-    pose(state);
-  }
-
-  function manual(state) {
-    phase = 'idle';
-    resetPose(state);
-  }
-
   function settle(state, finalBreakAge) {
     phase = 'done';
-    played = true;
     state.breakAge = finalBreakAge;
     resetPose(state);
   }
@@ -85,7 +68,6 @@ export function createOrbDrop(nameImpact) {
 
   function advance(state, dt) {
     if (phase === 'fall') {
-      played = true;
       elapsed += dt;
       if (elapsed >= impactTime) {
         phase = 'impact';
@@ -101,8 +83,7 @@ export function createOrbDrop(nameImpact) {
   }
 
   return {
-    resize, start, manual, settle, pose, advance,
-    get active() { return phase === 'fall' || phase === 'impact'; },
-    get canReplay() { return played && (phase === 'done' || phase === 'idle'); }
+    resize, settle, pose, advance,
+    get active() { return phase === 'fall' || phase === 'impact'; }
   };
 }
